@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Events Tracker</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'smart-primary': '#4f46e5',
+                        'smart-primary-dark': '#3730a3',
+                        'smart-accent': '#10b981',
+                        'smart-bg': '#f8fafc',
+                        'smart-surface': '#ffffff',
+                        'smart-text-main': '#1e293b',
+                        'smart-text-muted': '#64748b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease-out; }
+        .slide-enter-from, .slide-leave-to { transform: translateX(100%); }
+    </style>
+</head>
+<body class="bg-smart-bg text-smart-text-main">
+    <div id="app" class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="hidden md:flex flex-col w-64 bg-smart-surface border-r border-gray-200">
+            <div class="p-6">
+                <h1 class="text-2xl font-bold text-smart-primary">AI Events</h1>
+                <p class="text-xs text-smart-text-muted mt-1">Intelligence Pipeline</p>
+            </div>
+            <nav class="flex-1 px-4 space-y-2 mt-4">
+                <button @click="view='dashboard'" :class="view==='dashboard'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
+                    Dashboard
+                </button>
+                <button @click="view='timeline'" :class="view==='timeline'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
+                    Timeline
+                </button>
+                <button @click="view='calendar'" :class="view==='calendar'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
+                    Calendar
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden">
+            <header class="h-16 bg-smart-surface border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+                <h2 class="text-lg font-semibold capitalize">{{ view }}</h2>
+                <input v-model="search" type="text" placeholder="Search events..." class="pl-4 pr-4 py-2 border border-gray-200 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all w-64">
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-6">
+                <!-- Dashboard -->
+                <div v-if="view==='dashboard'">
+                    <div v-if="loading" class="flex justify-center py-12">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-smart-primary"></div>
+                    </div>
+                    <div v-else class="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                        <div v-for="e in filtered" :key="e.id" @click="detail=e" class="bg-smart-surface p-5 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-start space-x-4">
+                            <div class="w-14 h-14 rounded-2xl bg-indigo-50 flex flex-col items-center justify-center text-smart-primary">
+                                <span class="text-xs font-bold uppercase">{{ e.date ? e.date.substring(5,7) : '--' }}</span>
+                                <span class="text-lg font-black leading-none mt-1">{{ e.date ? parseInt(e.date.substring(8,10)).toString() : '--' }}</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex justify-between items-start mb-1">
+                                    <h4 class="text-sm font-bold truncate pr-4">{{ e.title }}</h4>
+                                    <span :class="scoreClass(e.score)" class="text-xs font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
+                                </div>
+                                <p class="text-xs text-smart-text-muted truncate mb-1">{{ e.institution || 'N/A' }}</p>
+                                <p class="text-xs text-smart-text-muted">{{ e.date }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                <div v-if="view==='timeline'">
+                    <div class="max-w-2xl mx-auto py-8">
+                        <div class="relative border-l-2 border-gray-200 ml-4 space-y-8">
+                            <div v-for="e in filtered" :key="e.id" class="relative pl-8 group cursor-pointer" @click="detail=e">
+                                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white border-2 border-smart-primary group-hover:scale-125 transition-transform"></div>
+                                <div class="bg-smart-surface p-4 rounded-2xl shadow-sm border border-gray-100 group-hover:border-indigo-200 transition-all">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <span class="text-xs font-bold text-smart-primary uppercase">{{ e.date }}</span>
+                                        <span :class="scoreClass(e.score)" class="text-xs font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
+                                    </div>
+                                    <h4 class="text-sm font-bold mb-1">{{ e.title }}</h4>
+                                    <p class="text-xs text-smart-text-muted truncate">{{ e.institution || 'N/A' }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calendar -->
+                <div v-if="view==='calendar'">
+                    <div class="bg-smart-surface p-6 rounded-3xl shadow-sm border border-gray-100">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-lg font-bold">{{ monthName }} {{ calYear }}</h3>
+                            <div class="flex space-x-2">
+                                <button @click="calShift(-1)" class="p-2 hover:bg-gray-100 rounded-full">◀</button>
+                                <button @click="calShift(1)" class="p-2 hover:bg-gray-100 rounded-full">▶</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-7 gap-2">
+                            <div v-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d" class="text-center text-xs font-bold text-smart-text-muted uppercase mb-2">{{ d }}</div>
+                            <div v-for="cell in calCells" :key="cell.id" :class="cell.day ? 'aspect-square bg-gray-50 rounded-2xl p-1 hover:bg-indigo-50 cursor-pointer transition-colors relative group' : 'aspect-square'" @click="onDayClick(cell.day)">
+                                <span v-if="cell.day" class="text-xs font-medium">{{ cell.day }}</span>
+                                <div v-if="cell.day && cell.events.length" class="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5 pointer-events-none">
+                                    <div v-for="ev in cell.events" :key="ev.id" class="w-2.5 h-2.5 rounded-full ring-1 ring-white" :style="{background: ev.score >= 9 ? '#059669' : ev.score >= 7 ? '#4f46e5' : '#cbd5e1'}" :title="ev.title"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail Panel -->
+            <transition name="slide">
+                <div v-if="detail" class="absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <span class="text-xs font-bold text-smart-text-muted uppercase">Event Details</span>
+                        <button @click="detail=null" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div>
+                            <span :class="scoreClass(detail.score)" class="text-xs font-black px-2 py-0.5 rounded-full">Score {{ detail.score }}</span>
+                            <h3 class="text-2xl font-bold mt-2">{{ detail.title }}</h3>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="p-3 bg-gray-50 rounded-2xl">
+                                <p class="text-xs text-smart-text-muted font-bold mb-1">Date</p>
+                                <p class="text-xs font-semibold">{{ detail.date }}</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-2xl">
+                                <p class="text-xs text-smart-text-muted font-bold mb-1">Location</p>
+                                <p class="text-xs font-semibold truncate">{{ detail.location || 'Remote' }}</p>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-xs text-smart-text-muted font-bold">Organizer</p>
+                            <p class="text-sm font-medium">{{ detail.institution || 'N/A' }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-smart-text-muted font-bold">Description</p>
+                            <p class="text-sm text-gray-600">{{ detail.description || 'No description available.' }}</p>
+                        </div>
+                        <div class="pt-6 border-t">
+                            <a :href="detail.url" target="_blank" class="flex items-center justify-center w-full py-3 bg-smart-primary text-white rounded-2xl font-bold text-sm hover:bg-smart-primary-dark transition-colors">
+                                Visit Official Site →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Mobile Nav -->
+            <nav class="md:hidden h-16 bg-smart-surface border-t border-gray-200 flex items-center justify-around px-4 shrink-0">
+                <button @click="view='dashboard'" :class="view==='dashboard'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
+                    <span class="text-xs">📊</span><span class="text-xs mt-1">Dashboard</span>
+                </button>
+                <button @click="view='timeline'" :class="view==='timeline'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
+                    <span class="text-xs">📅</span><span class="text-xs mt-1">Timeline</span>
+                </button>
+                <button @click="view='calendar'" :class="view==='calendar'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
+                    <span class="text-xs">🗓</span><span class="text-xs mt-1">Calendar</span>
+                </button>
+            </nav>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, computed } = Vue;
+
+        createApp({
+            setup() {
+                const events = ref([]);
+                const loading = ref(true);
+                const view = ref('dashboard');
+                const search = ref('');
+                const detail = ref(null);
+                const calMonth = ref(new Date());
+
+                const norm = (s) => {
+                    if (!s) return '';
+                    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+                    const d = new Date(s);
+                    if (isNaN(d.getTime())) return s;
+                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                };
+
+                const fetchEvents = async () => {
+                    loading.value = true;
+                    try {
+                        const r = await fetch('http://localhost:8082/events');
+                        const data = await r.json();
+                        events.value = Array.isArray(data) ? data : [];
+                    } catch(e) { console.error(e); }
+                    finally { loading.value = false; }
+                };
+
+                const filtered = computed(() => {
+                    let list = [...events.value];
+                    if (search.value) {
+                        const q = search.value.toLowerCase();
+                        list = list.filter(e =>
+                            (e.title||'').toLowerCase().includes(q) ||
+                            (e.institution||'').toLowerCase().includes(q) ||
+                            (e.location||'').toLowerCase().includes(q) ||
+                            norm(e.date) === q
+                        );
+                    }
+                    return list;
+                });
+
+                const scoreClass = (s) => {
+                    if (s >= 9) return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+                    if (s >= 7) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+                    return 'bg-gray-100 text-gray-600 border border-gray-200';
+                };
+
+                const monthName = computed(() => calMonth.value.toLocaleString('default',{month:'long'}));
+                const calYear = computed(() => calMonth.value.getFullYear());
+
+                const evtMap = computed(() => {
+                    const m = {};
+                    events.value.forEach(e => { const d = norm(e.date); if (d) { if (!m[d]) m[d] = []; m[d].push(e); } });
+                    return m;
+                });
+
+                const calCells = computed(() => {
+                    const y = calMonth.value.getFullYear();
+                    const mon = calMonth.value.getMonth();
+                    const days = new Date(y, mon+1, 0).getDate();
+                    const blanks = new Date(y, mon, 1).getDay();
+                    const cells = [];
+                    let id = 0;
+                    for (let i = 0; i < blanks; i++) cells.push({ id: id++, day: null, events: [] });
+                    for (let d = 1; d <= days; d++) {
+                        const key = `${y}-${String(mon+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        cells.push({ id: id++, day: d, events: evtMap.value[key] || [] });
+                    }
+                    return cells;
+                });
+
+                const calShift = (n) => { calMonth.value = new Date(calMonth.value.getFullYear(), calMonth.value.getMonth()+n, 1); };
+                const onDayClick = (day) => {
+                    if (!day) return;
+                    const y = calMonth.value.getFullYear();
+                    const m = String(calMonth.value.getMonth()+1).padStart(2,'0');
+                    search.value = `${y}-${m}-${String(day).padStart(2,'0')}`;
+                    view.value = 'dashboard';
+                };
+
+                onMounted(fetchEvents);
+
+                return { events, loading, view, search, detail, filtered, scoreClass, monthName, calYear, calCells, calShift, onDayClick };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
