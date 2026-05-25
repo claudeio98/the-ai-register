@@ -516,31 +516,6 @@
                 </div>
             </transition>
 
-            <!-- Hide confirmation modal -->
-            <div v-if="hideConfirm" class="fixed inset-0 z-50 flex items-end md:items-center justify-center" @click="hideConfirm=null">
-                <div class="fixed inset-0 backdrop-overlay"></div>
-                <div class="relative bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-5 w-full md:max-w-sm mx-0 md:mx-4" @click.stop>
-                    <div class="flex justify-center pt-1 pb-2 md:hidden">
-                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl mb-2">🙈</div>
-                        <h3 class="text-sm font-bold text-smart-text-main mb-1">Hide this event?</h3>
-                        <p class="text-xs text-smart-text-muted mb-4">It won't appear in your event list anymore. You can manage hidden events from the menu.</p>
-                        <button @click="hideDontAskAgain ? localStorage.setItem('hide_dont_ask', 'true') : null; performHideNow(hideConfirm); hideConfirm=null" class="w-full py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors mb-2">
-                            Hide Event
-                        </button>
-                        <button @click="hideDontAskAgain=false; hideConfirm=null" class="w-full py-2.5 bg-gray-100 text-smart-text-main rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
-                            Cancel
-                        </button>
-                        <label class="flex items-center justify-center gap-1.5 mt-3 cursor-pointer">
-                            <input type="checkbox" v-model="hideDontAskAgain" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                            <span class="text-[11px] text-smart-text-muted">Don't show this again</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
             <!-- Mobile Bottom Navigation -->
             <nav class="md:hidden h-16 bg-smart-surface border-t border-gray-200 flex items-center justify-around px-1 shrink-0 z-40 relative">
                 <button @click="view='dashboard'" :class="view==='dashboard'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full h-full transition-colors touch-active-btn">
@@ -647,8 +622,6 @@
 
                 // Hidden events state
                 const subscriberEmail = ref(localStorage.getItem('subscriber_email') || '');
-                const hideConfirm = ref(null);
-                const hideDontAskAgain = ref(localStorage.getItem('hide_dont_ask') === 'true');
                 const hiddenIds = ref(new Set());
                 const restoreEmail = ref('');
                 const restoreLoading = ref(false);
