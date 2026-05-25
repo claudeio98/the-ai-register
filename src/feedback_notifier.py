@@ -1,19 +1,44 @@
 """Feedback notification service.
-Logs feedback to a local file and attempts to send email notification
-using the existing gmcli integration."""
+Logs feedback to a local file and sends email notification
+via Gmail SMTP (App Password)."""
 
 import os
-import subprocess
+import smtplib
 from datetime import datetime
+from email.mime.text import MIMEText
 
 # Feedback log file path
 FEEDBACK_LOG_DIR = "data"
 FEEDBACK_LOG_FILE = os.path.join(FEEDBACK_LOG_DIR, "feedback.log")
 
-# Default sender Gmail address (reused from notifier.py)
-GMAIL_USER = "p94126541@gmail.com"
-# Where to send feedback notifications
-FEEDBACK_RECIPIENT = "p94126541@gmail.com"
+# Email configuration from environment
+GMAIL_USER = os.environ.get("GMAIL_USER", "p94126541@gmail.com")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+FEEDBACK_RECIPIENT = os.environ.get("FEEDBACK_RECIPIENT", GMAIL_USER)
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+
+def send_email(to: str, subject: str, body: str) -> bool:
+    """Send an email via Gmail SMTP. Returns True on success."""
+    if not GMAIL_APP_PASSWORD:
+        print("GMAIL_APP_PASSWORD not set. Skipping feedback email.")
+        return False
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"] = GMAIL_USER
+    msg["To"] = to
+    msg["Subject"] = subject
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Failed to send feedback email: {e}")
+        return False
 
 
 def log_feedback(category: str, message: str) -> None:
@@ -31,25 +56,16 @@ def log_feedback(category: str, message: str) -> None:
 
 
 def send_feedback_email(category: str, message: str) -> bool:
-    """Attempt to send feedback via gmcli. Returns True on success."""
+    """Attempt to send feedback via SMTP. Returns True on success."""
     body = (
         f"Category: {category}\n\n"
         f"Message:\n{message}\n"
     )
-    try:
-        subprocess.run(
-            [
-                "gmcli", GMAIL_USER, "send",
-                "--to", FEEDBACK_RECIPIENT,
-                "--subject", f"[Feedback] {category}",
-                "--body", body,
-            ],
-            check=True,
-        )
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"Failed to send feedback email: {e}")
-        return False
+    return send_email(
+        to=FEEDBACK_RECIPIENT,
+        subject=f"[Feedback] {category}",
+        body=body,
+    )
 
 
 def notify_feedback(category: str, message: str) -> None:
