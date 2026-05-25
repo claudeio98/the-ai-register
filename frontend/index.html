@@ -755,7 +755,22 @@
                     fetchEvents();
                 };
 
-                const performHideNow = async (eventId) => {
+                const showError = (msg) => {
+                    const old = document.querySelector('.hide-error-toast');
+                    if (old) old.remove();
+                    const toast = document.createElement('div');
+                    toast.className = 'hide-error-toast fixed top-4 right-4 z-[100] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-xl text-xs font-medium shadow-lg';
+                    toast.textContent = msg;
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 3000);
+                };
+                const doHide = async (eventId) => {
+                    if (!subscriberEmail.value) {
+                        showSubscribeModal.value = true;
+                        return;
+                    }
+                    const targetEl = document.querySelector(`[data-event-id="${eventId}"]`);
+                    if (targetEl) targetEl.style.opacity = '0.4';
                     try {
                         const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
                         if (r.ok) {
@@ -767,58 +782,13 @@
                                 detail.value = null;
                             }
                         } else {
+                            if (targetEl) targetEl.style.opacity = '';
                             showError('Could not hide event. Please try again.');
                         }
                     } catch(e) {
+                        if (targetEl) targetEl.style.opacity = '';
                         showError('Network error. Please check your connection.');
                         console.error('Hide failed:', e);
-                    }
-                };
-                const showError = (msg) => {
-                    const old = document.querySelector('.hide-error-toast');
-                    if (old) old.remove();
-                    const toast = document.createElement('div');
-                    toast.className = 'hide-error-toast fixed top-4 right-4 z-[100] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-xl text-xs font-medium shadow-lg';
-                    toast.textContent = msg;
-                    document.body.appendChild(toast);
-                    setTimeout(() => toast.remove(), 3000);
-                };
-                let hideInProgress = false;
-                const doHide = async (eventId) => {
-                    if (hideInProgress) return;
-                    hideInProgress = true;
-                    try {
-                        if (!subscriberEmail.value) {
-                            showSubscribeModal.value = true;
-                            return;
-                        }
-                        if (!hideDontAskAgain.value) {
-                            hideConfirm.value = eventId;
-                            return;
-                        }
-                        const targetEl = document.querySelector(`[data-event-id="${eventId}"]`);
-                        if (targetEl) targetEl.style.opacity = '0.4';
-                        try {
-                            const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
-                            if (r.ok) {
-                                const s = new Set(hiddenIds.value);
-                                s.add(eventId);
-                                hiddenIds.value = s;
-                                events.value = events.value.filter(e => e.id !== eventId);
-                                if (detail.value && detail.value.id === eventId) {
-                                    detail.value = null;
-                                }
-                            } else {
-                                if (targetEl) targetEl.style.opacity = '';
-                                showError('Could not hide event. Please try again.');
-                            }
-                        } catch(e) {
-                            if (targetEl) targetEl.style.opacity = '';
-                            showError('Network error. Please check your connection.');
-                            console.error('Hide failed:', e);
-                        }
-                    } finally {
-                        hideInProgress = false;
                     }
                 };
 
@@ -1224,14 +1194,11 @@
                     feedbackStatus.value = null;
                 };
 
-                // Watch for hidden panel opening to refresh list
-                const origShowHiddenPanel = showHiddenPanel;
-                // We'll refresh hidden events whenever the panel is about to open
-                // by intercepting the click in template
+                // Hidden events are refreshed on click via @click in template
 
                 return { events, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
                     subscriberEmail, hiddenIds, restoreEmail, restoreLoading, restoreMessage, showHiddenPanel, hiddenEvents,
-                    doRestore, clearRestore, doHide, performHideNow, doUnhide, doUnhideAll, refreshHiddenEvents, hideConfirm, hideDontAskAgain,
+                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents,
                     showFeedbackModal, feedbackCategory, feedbackMessage, feedbackLoading, feedbackStatus,
                     submitFeedback, closeFeedbackModal,
                     isMobile, showDrawer, closeDrawer, searchExpanded, searchInput, activeTooltip, toggleTooltip,
