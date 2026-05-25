@@ -304,7 +304,7 @@
 
             <!-- Detail Panel - bottom sheet on mobile, right-slide on desktop -->
             <!-- Mobile backdrop -->
-            <div v-if="detail && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="detail=null"></div>
+            <div v-if="detail" class="fixed inset-0 z-40 backdrop-overlay" @click="detail=null"></div>
             <transition :name="isMobile ? 'slide-up' : 'slide'">
                 <div v-if="detail" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
                     <!-- Drag handle (mobile only) -->
@@ -378,7 +378,7 @@
 
             <!-- Subscribe Modal - bottom sheet on mobile, right-slide on desktop -->
             <!-- Mobile backdrop -->
-            <div v-if="showSubscribeModal && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="closeSubscribeModal"></div>
+            <div v-if="showSubscribeModal" class="fixed inset-0 z-40 backdrop-overlay" @click="closeSubscribeModal"></div>
             <transition :name="isMobile ? 'slide-up' : 'slide'">
                 <div v-if="showSubscribeModal" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
                     <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
@@ -432,7 +432,7 @@
 
             <!-- Hidden Events Management Panel - bottom sheet on mobile, right-slide on desktop -->
             <!-- Mobile backdrop -->
-            <div v-if="showHiddenPanel && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="showHiddenPanel=false"></div>
+            <div v-if="showHiddenPanel" class="fixed inset-0 z-40 backdrop-overlay" @click="showHiddenPanel=false"></div>
             <transition :name="isMobile ? 'slide-up' : 'slide'">
                 <div v-if="showHiddenPanel" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
                     <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
@@ -468,7 +468,7 @@
 
             <!-- Feedback Modal - bottom sheet on mobile, right-slide on desktop -->
             <!-- Mobile backdrop -->
-            <div v-if="showFeedbackModal && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="closeFeedbackModal"></div>
+            <div v-if="showFeedbackModal" class="fixed inset-0 z-40 backdrop-overlay" @click="closeFeedbackModal"></div>
             <transition :name="isMobile ? 'slide-up' : 'slide'">
                 <div v-if="showFeedbackModal" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
                     <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
@@ -527,10 +527,10 @@
                         <div class="text-2xl mb-2">🙈</div>
                         <h3 class="text-sm font-bold text-smart-text-main mb-1">Hide this event?</h3>
                         <p class="text-xs text-smart-text-muted mb-4">It won't appear in your event list anymore. You can manage hidden events from the menu.</p>
-                        <button @click="confirmHide(hideConfirm); hideConfirm=null" class="w-full py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors mb-2">
+                        <button @click="hideDontAskAgain ? localStorage.setItem('hide_dont_ask', 'true') : null; performHideNow(hideConfirm); hideConfirm=null" class="w-full py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors mb-2">
                             Hide Event
                         </button>
-                        <button @click="hideConfirm=null" class="w-full py-2.5 bg-gray-100 text-smart-text-main rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
+                        <button @click="hideDontAskAgain=false; hideConfirm=null" class="w-full py-2.5 bg-gray-100 text-smart-text-main rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
                             Cancel
                         </button>
                         <label class="flex items-center justify-center gap-1.5 mt-3 cursor-pointer">
@@ -755,38 +755,71 @@
                     fetchEvents();
                 };
 
-                const confirmHide = async (eventId) => {
-                    if (hideDontAskAgain.value) {
-                        localStorage.setItem('hide_dont_ask', 'true');
-                    }
-                    await performHide(eventId);
-                };
-                const doHide = async (eventId) => {
-                    if (!hideDontAskAgain.value && subscriberEmail.value) {
-                        hideConfirm.value = eventId;
-                        return;
-                    }
-                    await performHide(eventId);
-                };
-                const performHide = async (eventId) => {
-                    // If not connected, prompt to subscribe
-                    if (!subscriberEmail.value) {
-                        showSubscribeModal.value = true;
-                        return;
-                    }
+                const performHideNow = async (eventId) => {
                     try {
                         const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
                         if (r.ok) {
                             const s = new Set(hiddenIds.value);
                             s.add(eventId);
                             hiddenIds.value = s;
-                            // Also hide in the events list so it disappears immediately
                             events.value = events.value.filter(e => e.id !== eventId);
                             if (detail.value && detail.value.id === eventId) {
                                 detail.value = null;
                             }
+                        } else {
+                            showError('Could not hide event. Please try again.');
                         }
-                    } catch(e) { console.error('Hide failed:', e); }
+                    } catch(e) {
+                        showError('Network error. Please check your connection.');
+                        console.error('Hide failed:', e);
+                    }
+                };
+                const showError = (msg) => {
+                    const old = document.querySelector('.hide-error-toast');
+                    if (old) old.remove();
+                    const toast = document.createElement('div');
+                    toast.className = 'hide-error-toast fixed top-4 right-4 z-[100] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-xl text-xs font-medium shadow-lg';
+                    toast.textContent = msg;
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 3000);
+                };
+                let hideInProgress = false;
+                const doHide = async (eventId) => {
+                    if (hideInProgress) return;
+                    hideInProgress = true;
+                    try {
+                        if (!subscriberEmail.value) {
+                            showSubscribeModal.value = true;
+                            return;
+                        }
+                        if (!hideDontAskAgain.value) {
+                            hideConfirm.value = eventId;
+                            return;
+                        }
+                        const targetEl = document.querySelector(`[data-event-id="${eventId}"]`);
+                        if (targetEl) targetEl.style.opacity = '0.4';
+                        try {
+                            const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
+                            if (r.ok) {
+                                const s = new Set(hiddenIds.value);
+                                s.add(eventId);
+                                hiddenIds.value = s;
+                                events.value = events.value.filter(e => e.id !== eventId);
+                                if (detail.value && detail.value.id === eventId) {
+                                    detail.value = null;
+                                }
+                            } else {
+                                if (targetEl) targetEl.style.opacity = '';
+                                showError('Could not hide event. Please try again.');
+                            }
+                        } catch(e) {
+                            if (targetEl) targetEl.style.opacity = '';
+                            showError('Network error. Please check your connection.');
+                            console.error('Hide failed:', e);
+                        }
+                    } finally {
+                        hideInProgress = false;
+                    }
                 };
 
                 const doUnhide = async (eventId) => {
@@ -1198,12 +1231,12 @@
 
                 return { events, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
                     subscriberEmail, hiddenIds, restoreEmail, restoreLoading, restoreMessage, showHiddenPanel, hiddenEvents,
-                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents, hideConfirm, hideDontAskAgain, confirmHide,
+                    doRestore, clearRestore, doHide, performHideNow, doUnhide, doUnhideAll, refreshHiddenEvents, hideConfirm, hideDontAskAgain,
                     showFeedbackModal, feedbackCategory, feedbackMessage, feedbackLoading, feedbackStatus,
                     submitFeedback, closeFeedbackModal,
                     isMobile, showDrawer, closeDrawer, searchExpanded, searchInput, activeTooltip, toggleTooltip,
                     pullRefreshOffset, pullRefreshing, onTouchStart, onTouchMove, onTouchEnd,
-                    onSheetTouchStart, onSheetTouchMove, sheetTouchStart };
+};
             }
         }).mount('#app');
     </script>
