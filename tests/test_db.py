@@ -1,12 +1,13 @@
 import unittest
 import sqlite3
 import os
+import tempfile
 from src.db import init_db, get_connection, DB_PATH
 
 class TestDB(unittest.TestCase):
     def setUp(self):
         # Use a temporary database for testing
-        self.test_db = "/Users/claudio/.pi/workspace/ai-events-tracker/tests/test_events.db"
+        self.test_db = os.path.join(tempfile.gettempdir(), f"test_events_{os.getpid()}.db")
         # Monkeypatch DB_PATH in src.db to use the test database
         import src.db
         src.db.DB_PATH = self.test_db

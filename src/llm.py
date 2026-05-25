@@ -1,22 +1,34 @@
 import os
 from openai import OpenAI
 
-# Using the key found in the system logs
-OPENROUTER_API_KEY = "OPENROUTER_API_KEY_REMOVED"
+_client = None
 
-# Configure OpenRouter client
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
-    default_headers={
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "AI Events Intelligence Pipeline",
-    }
-)
+
+def get_client():
+    """Lazily initialize and return the OpenRouter client.
+    This avoids OpenAI import errors at module load time when
+    OPENROUTER_API_KEY is not set (e.g., in test environments).
+    """
+    global _client
+    if _client is None:
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            print("Warning: OPENROUTER_API_KEY not set in environment")
+        _client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            default_headers={
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "AI Events Intelligence Pipeline",
+            }
+        )
+    return _client
+
 
 def query_llm(system_prompt, user_prompt, response_format="text"):
     """Generic helper to query the LLM via OpenRouter."""
     try:
+        client = get_client()
         response = client.chat.completions.create(
             model=os.environ.get("MODEL_NAME", "google/gemma-4-31b-it"),
             messages=[

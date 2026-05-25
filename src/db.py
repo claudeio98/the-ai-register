@@ -20,7 +20,9 @@ def init_db():
                 description TEXT,
                 category TEXT,
                 last_checked TIMESTAMP,
-                failures INTEGER DEFAULT 0
+                failures INTEGER DEFAULT 0,
+                parent_id INTEGER,
+                crawl_depth INTEGER DEFAULT 0
             )
         ''')
         
@@ -49,7 +51,11 @@ def init_db():
                 score REAL,
                 status TEXT DEFAULT 'discovered',
                 raw_content TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                canonical_event_id INTEGER REFERENCES events(id),
+                fingerprint TEXT,
+                conference_id INTEGER REFERENCES events(id),
+                discovery_source_id INTEGER REFERENCES sources(id)
             )
         ''')
         
@@ -61,6 +67,25 @@ def init_db():
                 sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (event_id) REFERENCES events (id)
             )
+        ''')
+        
+        # hidden_events table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS hidden_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                subscriber_email TEXT NOT NULL,
+                hidden_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event_id, subscriber_email)
+            )
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_hidden_events_lookup 
+            ON hidden_events(subscriber_email, event_id)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_events_conference_id 
+            ON events(conference_id)
         ''')
         conn.commit()
 

@@ -4,24 +4,26 @@ import os
 
 def run_script(script_name):
     print(f"--- Running {script_name} ---")
-    result = subprocess.run([sys.executable, f"/Users/claudio/.pi/workspace/ai-events-tracker/src/{script_name}"], capture_output=False)
+    SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    script_path = os.path.join(SCRIPTS_DIR, script_name)
+    result = subprocess.run([sys.executable, script_path], capture_output=False)
     if result.returncode != 0:
         print(f"Error running {script_name}")
     return result.returncode
 
 def main():
-    # 0. Occasionally discover new sources
-    # In a real production system, this could be based on a timestamp in the DB
-    # For now, we'll make it a separate step or run it based on a simple logic.
-    # Let's run it every time the pipeline is triggered for maximum discovery, 
-    # or you can move this to a separate cron job.
-    run_script("discovery.py")
+    # 0. Discover new sources (Brave Search + Eventbrite API)
+    run_script("discovery_stage.py")
     
     # 1. Fetch new content
     run_script("fetcher.py")
     
     # 2. Process content and score events
     run_script("processor.py")
+    
+    # 2b. Conference scoring phase: aggregate speaker info from related pages
+    run_script("conference_scorer.py")
     
     # 3. Send notifications
     run_script("notifier.py")

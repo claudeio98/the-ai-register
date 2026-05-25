@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Events Tracker</title>
+    <title>The AI Register</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -24,8 +24,40 @@
         }
     </script>
     <style>
+        /* Existing transitions */
         .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease-out; }
         .slide-enter-from, .slide-leave-to { transform: translateX(100%); }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease-out; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+        /* Bottom sheet transitions (mobile) */
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease-out; }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+
+        /* Drawer menu transitions (mobile) */
+        .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease-out; }
+        .drawer-enter-from, .drawer-leave-to { transform: translateX(-100%); }
+
+        /* Backdrop overlay */
+        .backdrop-overlay { background: rgba(0,0,0,0.3); transition: opacity 0.25s ease-out; }
+
+        /* Calendar cells */
+        .cal-cell { min-height: 8rem; }
+        @media (max-width: 767px) {
+            .cal-cell { min-height: 4rem; }
+        }
+
+        /* Touch active state */
+        .touch-active:active { transform: scale(0.97); opacity: 0.8; transition: transform 0.1s, opacity 0.1s; }
+        .touch-active-btn:active { transform: scale(0.95); opacity: 0.85; }
+
+        /* Pull-to-refresh indicator */
+        .ptr-indicator { transition: transform 0.2s ease-out; }
+        .ptr-spinner { border: 2px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: ptr-spin 0.6s linear infinite; }
+        @keyframes ptr-spin { to { transform: rotate(360deg); } }
+
+        /* Hide scrollbar on drawer backdrop */
+        .overflow-hidden-body { overflow: hidden; }
     </style>
 </head>
 <body class="bg-smart-bg text-smart-text-main">
@@ -33,67 +65,206 @@
         <!-- Sidebar -->
         <aside class="hidden md:flex flex-col w-64 bg-smart-surface border-r border-gray-200">
             <div class="p-6">
-                <h1 class="text-2xl font-bold text-smart-primary">AI Events</h1>
-                <p class="text-xs text-smart-text-muted mt-1">Intelligence Pipeline</p>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-2xl font-bold text-smart-primary cursor-pointer" @click="view='dashboard'; clearFilter(); search=''">The AI Register</h1>
+                    <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">📍 London</span>
+                </div>
+                <p class="text-xs text-smart-text-muted mt-1">Live Events Radar</p>
             </div>
             <nav class="flex-1 px-4 space-y-2 mt-4">
                 <button @click="view='dashboard'" :class="view==='dashboard'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
                     Dashboard
                 </button>
-                <button @click="view='timeline'" :class="view==='timeline'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
-                    Timeline
-                </button>
                 <button @click="view='calendar'" :class="view==='calendar'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
                     Calendar
                 </button>
             </nav>
+
+            <!-- Restore Saved View Section -->
+            <div class="px-4 mb-3">
+                <template v-if="!subscriberEmail">
+                    <p class="text-[10px] font-bold text-smart-text-muted uppercase mb-1.5">Restore Saved View</p>
+                    <div class="flex gap-1.5">
+                        <input v-model="restoreEmail" type="email" placeholder="your@email.com"
+                               class="flex-1 min-w-0 px-2.5 py-1.5 border border-gray-200 rounded-lg text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                               :disabled="restoreLoading" @keyup.enter="doRestore">
+                        <button @click="doRestore" :disabled="restoreLoading"
+                                class="px-3 py-1.5 bg-gray-100 text-smart-text-main rounded-lg text-[11px] font-bold hover:bg-gray-200 transition-colors shrink-0">
+                            <span v-if="restoreLoading">...</span>
+                            <span v-else>Restore</span>
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-smart-text-muted mt-1 leading-tight">Enter your subscription email to sync your hidden events across devices.</p>
+                    <div v-if="restoreMessage" :class="restoreMessage.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
+                         class="mt-1.5 p-1.5 rounded-lg text-[10px] font-medium">
+                        {{ restoreMessage.text }}
+                    </div>
+                </template>
+                <template v-else>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px]">✅</span>
+                        <span class="text-[10px] font-medium text-smart-text-main truncate">Restored</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-0.5">
+                        <span class="text-[9px] text-smart-text-muted truncate">{{ subscriberEmail }}</span>
+                        <button @click="clearRestore" class="text-[9px] text-smart-primary hover:underline font-medium shrink-0">Clear</button>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Manage Hidden + Subscribe -->
+            <div class="px-4 pb-6 space-y-2">
+                <button v-if="subscriberEmail" @click="refreshHiddenEvents(); showHiddenPanel=true; detail=null"
+                        class="w-full flex items-center justify-center px-4 py-2 rounded-xl transition-all duration-200 font-medium text-[11px] bg-gray-100 text-smart-text-main hover:bg-gray-200">
+                    Manage Hidden ({{ hiddenIds.size }})
+                </button>
+                <button @click="showSubscribeModal=true" class="w-full flex items-center justify-center px-4 py-3 rounded-xl transition-all duration-200 font-medium bg-smart-accent text-white hover:bg-emerald-600 shadow-sm">
+                    Subscribe to Updates
+                </button>
+                <button @click="showFeedbackModal=true" class="w-full flex items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-[11px] bg-gray-100 text-smart-text-main hover:bg-indigo-50 hover:text-smart-primary hover:border-indigo-200 border border-gray-200">
+                    💬 Feedback &amp; Feature Requests
+                </button>
+            </div>
         </aside>
 
-        <!-- Main -->
         <main class="flex-1 flex flex-col h-full overflow-hidden">
-            <header class="h-16 bg-smart-surface border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-                <h2 class="text-lg font-semibold capitalize">{{ view }}</h2>
-                <input v-model="search" type="text" placeholder="Search events..." class="pl-4 pr-4 py-2 border border-gray-200 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all w-64">
+            <header class="h-16 bg-smart-surface border-b border-gray-200 flex items-center justify-between px-3 md:px-6 shrink-0">
+                <h2 class="text-lg font-semibold">
+                    <span class="md:hidden">
+                        <template v-if="dayFilter">📅 {{ new Date(dayFilter + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }}</template>
+                        <template v-else-if="rangeFilter">📅 {{ new Date(rangeFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }} – {{ new Date(rangeFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}</template>
+                        <template v-else><span class="cursor-pointer" @click="view='dashboard'; clearFilter(); search=''">The AI Register</span> <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">📍 London</span></template>
+                    </span>
+                    <span class="hidden md:inline capitalize">{{ view }}</span>
+                </h2>
+                <!-- Desktop: full-width search -->
+                <div class="hidden md:block">
+                    <input v-model="search" type="text" placeholder="Search events..." class="pl-4 pr-4 py-2 border border-gray-200 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all w-64">
+                </div>
+                <!-- Mobile: collapsible search -->
+                <div class="md:hidden flex items-center">
+                    <div v-if="searchExpanded" class="flex items-center gap-2">
+                        <input ref="searchInput" v-model="search" type="text" placeholder="Search events..." @blur="searchExpanded = search ? true : false" @keyup.escape="searchExpanded=false"
+                               class="pl-3 pr-3 py-1.5 border border-gray-200 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all w-48">
+                        <button @click="searchExpanded=false; search=''; clearFilter()" class="p-1.5 hover:bg-gray-100 rounded-full text-sm text-smart-text-muted">✕</button>
+                    </div>
+                    <button v-else @click="searchExpanded=true; setTimeout(()=>searchInput?.focus(),50)" class="p-2 hover:bg-gray-100 rounded-full text-lg touch-active-btn" title="Search events">
+                        🔍
+                    </button>
+                </div>
             </header>
 
-            <div class="flex-1 overflow-y-auto p-6">
+            <div class="flex-1 overflow-y-auto p-6 main-scroll"
+                 @touchstart="onTouchStart"
+                 @touchmove="onTouchMove"
+                 @touchend="onTouchEnd"
+                 @touchcancel="onTouchEnd"
+                 :style="{ transform: pullRefreshing || pullRefreshOffset > 0 ? 'translateY(' + pullRefreshOffset + 'px)' : 'none', transition: pullRefreshing ? 'transform 0.3s ease-out' : 'transform 0.3s ease-out' }">
+                <!-- Pull-to-refresh indicator -->
+                <div v-if="pullRefreshing || pullRefreshOffset > 0" class="flex justify-center -mt-2 mb-2 ptr-indicator">
+                    <div v-if="pullRefreshing" class="ptr-spinner"></div>
+                    <div v-else class="text-smart-text-muted text-xs font-medium">▼ {{ Math.round(pullRefreshOffset / 60 * 100) }}%</div>
+                </div>
                 <!-- Dashboard -->
                 <div v-if="view==='dashboard'">
-                    <div v-if="loading" class="flex justify-center py-12">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-smart-primary"></div>
-                    </div>
-                    <div v-else class="grid gap-4 grid-cols-1 lg:grid-cols-2">
-                        <div v-for="e in filtered" :key="e.id" @click="detail=e" class="bg-smart-surface p-5 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-start space-x-4">
-                            <div class="w-14 h-14 rounded-2xl bg-indigo-50 flex flex-col items-center justify-center text-smart-primary">
-                                <span class="text-xs font-bold uppercase">{{ e.date ? e.date.substring(5,7) : '--' }}</span>
-                                <span class="text-lg font-black leading-none mt-1">{{ e.date ? parseInt(e.date.substring(8,10)).toString() : '--' }}</span>
+
+                    <!-- Summary Widgets -->
+                    <div v-if="!dayFilter && !rangeFilter" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div @click="filterToWeek" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer touch-active">
+                            <p class="text-[10px] font-bold text-smart-text-muted uppercase mb-1">This Week</p>
+                            <p class="text-2xl font-black text-smart-primary">{{ thisWeek }} <span class="text-sm font-medium text-smart-text-muted">events</span></p>
+                            <div v-if="thisWeekEvts.length" class="mt-2 space-y-0.5">
+                                <p v-for="(ev, i) in thisWeekEvts.slice(0, 5)" :key="i" class="text-[10px] text-smart-text-muted truncate leading-tight">• {{ ev.title }}</p>
+                                <p v-if="thisWeekEvts.length > 5" class="text-[9px] font-bold text-smart-primary mt-0.5">+{{ thisWeekEvts.length - 5 }} more</p>
                             </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex justify-between items-start mb-1">
-                                    <h4 class="text-sm font-bold truncate pr-4">{{ e.title }}</h4>
-                                    <span :class="scoreClass(e.score)" class="text-xs font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
-                                </div>
-                                <p class="text-xs text-smart-text-muted truncate mb-1">{{ e.institution || 'N/A' }}</p>
-                                <p class="text-xs text-smart-text-muted">{{ e.date }}</p>
+                        </div>
+                        <div @click="filterToMonth" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer touch-active">
+                            <p class="text-[10px] font-bold text-smart-text-muted uppercase mb-1">This Month</p>
+                            <p class="text-2xl font-black text-smart-primary">{{ thisMonth }} <span class="text-sm font-medium text-smart-text-muted">events</span></p>
+                            <div v-if="thisMonthEvts.length" class="mt-2 space-y-0.5">
+                                <p v-for="(ev, i) in thisMonthEvts.slice(0, 5)" :key="i" class="text-[10px] text-smart-text-muted truncate leading-tight">• {{ ev.title }}</p>
+                                <p v-if="thisMonthEvts.length > 5" class="text-[9px] font-bold text-smart-primary mt-0.5">+{{ thisMonthEvts.length - 5 }} more</p>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Timeline -->
-                <div v-if="view==='timeline'">
-                    <div class="max-w-2xl mx-auto py-8">
-                        <div class="relative border-l-2 border-gray-200 ml-4 space-y-8">
-                            <div v-for="e in filtered" :key="e.id" class="relative pl-8 group cursor-pointer" @click="detail=e">
-                                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white border-2 border-smart-primary group-hover:scale-125 transition-transform"></div>
-                                <div class="bg-smart-surface p-4 rounded-2xl shadow-sm border border-gray-100 group-hover:border-indigo-200 transition-all">
-                                    <div class="flex justify-between items-start mb-2">
-                                        <span class="text-xs font-bold text-smart-primary uppercase">{{ e.date }}</span>
-                                        <span :class="scoreClass(e.score)" class="text-xs font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
+                    <!-- Highlights -->
+                    <div v-if="!dayFilter && !rangeFilter" class="mb-6">
+                        <h3 class="text-sm font-bold text-smart-text-main mb-3">Highlights</h3>
+                        <div v-if="highlights.length" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div v-for="e in highlights" :key="e.id" @click="detail=e" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer group/highlight touch-active">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="relative inline-flex items-center group/tip">
+                                        <span :class="scoreClass(e.score)" class="text-[10px] font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
+                                        <span @click.stop="toggleTooltip(e.id)" class="text-[10px] text-smart-text-muted cursor-help ml-0.5 opacity-40 md:group-hover/tip:opacity-100 transition-opacity" :class="{ 'opacity-100': activeTooltip === e.id }">ⓘ</span>
+                                        <span :class="activeTooltip === e.id ? 'block' : 'hidden'" class="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-white text-xs text-smart-text-main px-2 py-1 rounded-lg shadow-lg border border-gray-200 whitespace-nowrap z-10">{{ scoreTooltipText }}</span>
+                                        <span class="hidden md:group-hover/tip:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-white text-xs text-smart-text-main px-2 py-1 rounded-lg shadow-lg border border-gray-200 whitespace-nowrap z-10">{{ scoreTooltipText }}</span>
+                                    </span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-[10px] font-bold text-smart-text-muted">{{ e.date }}</span>
+                                        <button v-if="!hiddenIds.has(e.id)" @click.stop="doHide(e.id)" class="w-9 h-9 md:w-5 md:h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500 md:opacity-0 md:group-hover/highlight:opacity-100 transition-all text-[10px] font-bold" style="min-width:44px;min-height:44px" title="Hide event">×</button>
                                     </div>
-                                    <h4 class="text-sm font-bold mb-1">{{ e.title }}</h4>
-                                    <p class="text-xs text-smart-text-muted truncate">{{ e.institution || 'N/A' }}</p>
                                 </div>
+                                <h4 class="text-xs font-bold line-clamp-2">{{ e.title }}</h4>
+                                <p class="text-[10px] text-smart-text-muted truncate mt-1">{{ e.institution || 'N/A' }}</p>
+                            </div>
+                        </div>
+                        <div v-else class="text-center py-8 text-smart-text-muted bg-smart-surface rounded-2xl border border-dashed border-gray-200">
+                            No upcoming highlights
+                        </div>
+                    </div>
+
+                    <!-- Section separator -->
+                    <div v-if="!dayFilter && !rangeFilter" class="-mx-6 mb-4 border-t border-gray-100"></div>
+                    <h3 v-if="!dayFilter && !rangeFilter" class="text-sm font-bold text-smart-text-main mb-3">All Events</h3>
+
+                    <!-- Filter chip -->
+                    <div v-if="dayFilter || rangeFilter" class="flex items-center gap-2 mb-4">
+                        <span v-if="dayFilter" class="text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                            📅 {{ new Date(dayFilter + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }}
+                            <button @click="clearFilter" class="ml-0.5 hover:bg-indigo-100 rounded-full p-0.5 leading-none">✕</button>
+                        </span>
+                        <span v-if="rangeFilter" class="text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                            📅 {{ new Date(rangeFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }} – {{ new Date(rangeFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                            <button @click="clearFilter" class="ml-0.5 hover:bg-indigo-100 rounded-full p-0.5 leading-none">✕</button>
+                        </span>
+                        <span class="text-[10px] text-smart-text-muted">{{ filtered.length }} event{{ filtered.length !== 1 ? 's' : '' }}</span>
+                    </div>
+                    <div v-if="loading" class="flex justify-center py-12">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-smart-primary"></div>
+                    </div>
+                    <div v-else-if="filtered.length === 0 && !dayFilter && !rangeFilter" class="text-center py-16 text-smart-text-muted bg-smart-surface rounded-2xl border border-dashed border-gray-200">
+                        No events match your search
+                    </div>
+                    <div v-else-if="filtered.length === 0 && (dayFilter || rangeFilter)" class="text-center py-16 text-smart-text-muted bg-smart-surface rounded-2xl border border-dashed border-gray-200">
+                        No events in this period
+                    </div>
+                    <div v-else class="grid gap-3 grid-cols-1">
+                        <div v-for="e in filtered" :key="e.id" class="bg-smart-surface md:p-4 p-3 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all flex items-start md:space-x-3 space-x-2 group/card touch-active">
+                            <div @click="detail=e" class="flex items-start md:space-x-3 space-x-2 flex-1 min-w-0 cursor-pointer">
+                                <div class="hidden md:flex w-12 h-12 rounded-xl bg-indigo-50 flex flex-col items-center justify-center text-smart-primary shrink-0">
+                                    <span class="text-[10px] font-bold uppercase leading-none">{{ e.date ? e.date.substring(5,7) : '--' }}</span>
+                                    <span class="text-base font-black leading-none mt-0.5">{{ e.date ? parseInt(e.date.substring(8,10)).toString() : '--' }}</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start gap-1.5 mb-0.5">
+                                        <h4 class="text-sm font-bold truncate">{{ e.title }}</h4>
+                                        <span class="relative inline-flex items-center group/tip shrink-0 mt-0.5">
+                                            <span :class="scoreClass(e.score)" class="text-[10px] font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
+                                            <span @click.stop="toggleTooltip(e.id)" class="text-[10px] text-smart-text-muted cursor-help ml-0.5 opacity-40 md:group-hover/tip:opacity-100 transition-opacity" :class="{ 'opacity-100': activeTooltip === e.id }">ⓘ</span>
+                                            <span :class="activeTooltip === e.id ? 'block' : 'hidden'" class="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-white text-xs text-smart-text-main px-2 py-1 rounded-lg shadow-lg border border-gray-200 whitespace-nowrap z-10">{{ scoreTooltipText }}</span>
+                                            <span class="hidden md:group-hover/tip:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-white text-xs text-smart-text-main px-2 py-1 rounded-lg shadow-lg border border-gray-200 whitespace-nowrap z-10">{{ scoreTooltipText }}</span>
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-smart-text-muted truncate">{{ e.institution || 'N/A' }}</p>
+                                    <p class="text-[10px] text-smart-text-muted mt-0.5">{{ e.date }}</p>
+                                    <div v-if="e.duplicate_count > 0" class="mt-1 hidden md:block">
+                                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">+{{ e.duplicate_count }} more source{{ e.duplicate_count > 1 ? 's' : '' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-start pt-1 shrink-0">
+                                <button v-if="!hiddenIds.has(e.id)" @click.stop="doHide(e.id)" class="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500 md:opacity-0 md:group-hover/card:opacity-100 transition-all text-xs font-bold touch-active-btn" style="min-width:44px;min-height:44px" title="Hide event">×</button>
                             </div>
                         </div>
                     </div>
@@ -101,20 +272,29 @@
 
                 <!-- Calendar -->
                 <div v-if="view==='calendar'">
-                    <div class="bg-smart-surface p-6 rounded-3xl shadow-sm border border-gray-100">
-                        <div class="flex justify-between items-center mb-6">
+                    <div class="bg-smart-surface p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100">
+                        <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-bold">{{ monthName }} {{ calYear }}</h3>
                             <div class="flex space-x-2">
-                                <button @click="calShift(-1)" class="p-2 hover:bg-gray-100 rounded-full">◀</button>
-                                <button @click="calShift(1)" class="p-2 hover:bg-gray-100 rounded-full">▶</button>
+                                <button @click="calShift(-1)" class="p-2 hover:bg-gray-100 rounded-full transition-colors">◀</button>
+                                <button @click="calShift(1)" class="p-2 hover:bg-gray-100 rounded-full transition-colors">▶</button>
                             </div>
                         </div>
-                        <div class="grid grid-cols-7 gap-2">
-                            <div v-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d" class="text-center text-xs font-bold text-smart-text-muted uppercase mb-2">{{ d }}</div>
-                            <div v-for="cell in calCells" :key="cell.id" :class="cell.day ? 'aspect-square bg-gray-50 rounded-2xl p-1 hover:bg-indigo-50 cursor-pointer transition-colors relative group' : 'aspect-square'" @click="onDayClick(cell.day)">
-                                <span v-if="cell.day" class="text-xs font-medium">{{ cell.day }}</span>
-                                <div v-if="cell.day && cell.events.length" class="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5 pointer-events-none">
-                                    <div v-for="ev in cell.events" :key="ev.id" class="w-2.5 h-2.5 rounded-full ring-1 ring-white" :style="{background: ev.score >= 9 ? '#059669' : ev.score >= 7 ? '#4f46e5' : '#cbd5e1'}" :title="ev.title"></div>
+                        <div class="grid grid-cols-7 gap-1 md:gap-1.5">
+                            <div v-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d" class="text-center text-[9px] md:text-[10px] font-bold text-smart-text-muted uppercase py-1">{{ d }}</div>
+                            <div v-for="cell in calCells" :key="cell.id"
+                                 :class="cell.day ? (isDayActive(cell.day) ? 'bg-indigo-100 rounded-xl p-1 md:p-1.5 cal-cell group ring-2 ring-indigo-300' : 'bg-gray-50 rounded-xl p-1 md:p-1.5 hover:bg-indigo-50 transition-colors cursor-pointer cal-cell group') : 'rounded-xl p-1 md:p-1.5 cal-cell'"
+                                 @click="onDayClick(cell.day)">
+                                <div v-if="cell.day" class="flex flex-col h-full">
+                                    <span class="text-[10px] md:text-xs font-semibold text-smart-text-main mb-0.5">{{ cell.day }}</span>
+                                    <div v-if="cell.events.length" class="flex-1 overflow-hidden">
+                                        <!-- Desktop: show title + score -->
+                                        <div v-for="(e, idx) in cell.events.slice(0, isMobile ? 4 : 3)" :key="idx" class="flex items-center gap-0.5 md:gap-1 mb-0.5 md:mb-1 last:mb-0 group/cal">
+                                            <span :class="scoreClass(e.score)" class="text-[6px] md:text-[7px] font-black px-0.5 md:px-1 py-0.5 rounded shrink-0 leading-none">{{ e.score }}</span>
+                                            <span class="hidden md:inline text-[9px] leading-tight truncate text-smart-text-muted">{{ e.title }}</span>
+                                        </div>
+                                        <div v-if="cell.events.length > (isMobile ? 4 : 3)" class="text-[7px] md:text-[8px] font-bold text-smart-primary pl-0.5 md:pl-2.5 mt-0.5 md:mt-1">+{{ cell.events.length - (isMobile ? 4 : 3) }} more</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -122,62 +302,333 @@
                 </div>
             </div>
 
-            <!-- Detail Panel -->
-            <transition name="slide">
-                <div v-if="detail" class="absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col">
-                    <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <!-- Detail Panel - bottom sheet on mobile, right-slide on desktop -->
+            <!-- Mobile backdrop -->
+            <div v-if="detail && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="detail=null"></div>
+            <transition :name="isMobile ? 'slide-up' : 'slide'">
+                <div v-if="detail" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
+                    <!-- Drag handle (mobile only) -->
+                    <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
+                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+                    </div>
+                    <div v-if="isMobile" class="px-5 pb-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl shrink-0">
+                        <span class="text-xs font-bold text-smart-text-muted uppercase">Event Details</span>
+                        <button @click="detail=null" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
+                    </div>
+                    <div v-if="!isMobile" class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                         <span class="text-xs font-bold text-smart-text-muted uppercase">Event Details</span>
                         <button @click="detail=null" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
                     </div>
                     <div class="flex-1 overflow-y-auto p-6 space-y-6">
                         <div>
                             <span :class="scoreClass(detail.score)" class="text-xs font-black px-2 py-0.5 rounded-full">Score {{ detail.score }}</span>
-                            <h3 class="text-2xl font-bold mt-2">{{ detail.title }}</h3>
+                            <details class="mt-1 group">
+                                <summary class="text-[10px] text-smart-text-muted cursor-pointer hover:text-smart-primary transition-colors list-none flex items-center gap-1">
+                                    <span>Why this score?</span>
+                                    <span class="text-[8px] transition-transform group-open:rotate-90">▸</span>
+                                </summary>
+                                <p class="text-[10px] text-smart-text-muted mt-1 pl-0 leading-relaxed">{{ scoreTooltipText }}</p>
+                            </details>
+                            <h3 class="text-xl font-bold mt-2">{{ detail.title }}</h3>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
-                            <div class="p-3 bg-gray-50 rounded-2xl">
-                                <p class="text-xs text-smart-text-muted font-bold mb-1">Date</p>
+                            <div class="p-3 bg-gray-50 rounded-xl">
+                                <p class="text-[10px] text-smart-text-muted font-bold mb-1">Date</p>
                                 <p class="text-xs font-semibold">{{ detail.date }}</p>
                             </div>
-                            <div class="p-3 bg-gray-50 rounded-2xl">
-                                <p class="text-xs text-smart-text-muted font-bold mb-1">Location</p>
+                            <div class="p-3 bg-gray-50 rounded-xl">
+                                <p class="text-[10px] text-smart-text-muted font-bold mb-1">Location</p>
                                 <p class="text-xs font-semibold truncate">{{ detail.location || 'Remote' }}</p>
                             </div>
                         </div>
                         <div>
-                            <p class="text-xs text-smart-text-muted font-bold">Organizer</p>
+                            <p class="text-[10px] text-smart-text-muted font-bold">Organizer</p>
                             <p class="text-sm font-medium">{{ detail.institution || 'N/A' }}</p>
                         </div>
                         <div>
-                            <p class="text-xs text-smart-text-muted font-bold">Description</p>
+                            <p class="text-[10px] text-smart-text-muted font-bold">Description</p>
                             <p class="text-sm text-gray-600">{{ detail.description || 'No description available.' }}</p>
                         </div>
-                        <div class="pt-6 border-t">
-                            <a :href="detail.url" target="_blank" class="flex items-center justify-center w-full py-3 bg-smart-primary text-white rounded-2xl font-bold text-sm hover:bg-smart-primary-dark transition-colors">
+                        <div class="pt-4 border-t space-y-2">
+                            <button v-if="!hiddenIds.has(detail.id)" @click="doHide(detail.id); detail=null"
+                                    class="w-full flex items-center justify-center py-3 bg-white text-smart-text-muted border border-gray-200 rounded-xl font-bold text-sm hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
+                                Hide Event
+                            </button>
+                            <a :href="detail.url" target="_blank" class="flex items-center justify-center w-full py-3 bg-smart-primary text-white rounded-xl font-bold text-sm hover:bg-smart-primary-dark transition-colors">
                                 Visit Official Site →
                             </a>
+                            <details v-if="detail.other_sources && detail.other_sources.length > 0" class="group">
+                                <summary class="flex items-center justify-between w-full py-2.5 px-4 bg-gray-50 border border-gray-200 rounded-xl text-[11px] font-bold text-smart-text-muted hover:bg-gray-100 hover:text-smart-text-main transition-colors cursor-pointer list-none">
+                                    <span>{{ detail.other_sources.length }} other source{{ detail.other_sources.length !== 1 ? 's' : '' }}</span>
+                                    <span class="text-[10px] transition-transform group-open:rotate-90">▸</span>
+                                </summary>
+                                <div class="mt-1.5 space-y-1">
+                                    <a v-for="(src, idx) in detail.other_sources" :key="idx"
+                                       :href="src.url" target="_blank"
+                                       class="flex items-center gap-2 w-full px-4 py-2.5 bg-white border border-gray-100 rounded-lg text-[11px] text-smart-text-muted hover:bg-indigo-50 hover:text-smart-primary hover:border-indigo-200 transition-colors">
+                                        <span class="text-[10px] text-gray-300 shrink-0">🔗</span>
+                                        <span class="truncate">{{ src.title || src.url }}</span>
+                                    </a>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </div>
             </transition>
 
-            <!-- Mobile Nav -->
-            <nav class="md:hidden h-16 bg-smart-surface border-t border-gray-200 flex items-center justify-around px-4 shrink-0">
-                <button @click="view='dashboard'" :class="view==='dashboard'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
-                    <span class="text-xs">📊</span><span class="text-xs mt-1">Dashboard</span>
+            <!-- Subscribe Modal - bottom sheet on mobile, right-slide on desktop -->
+            <!-- Mobile backdrop -->
+            <div v-if="showSubscribeModal && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="closeSubscribeModal"></div>
+            <transition :name="isMobile ? 'slide-up' : 'slide'">
+                <div v-if="showSubscribeModal" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
+                    <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
+                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+                    </div>
+                    <div :class="isMobile ? 'px-5 pb-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl shrink-0' : 'p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50'">
+                        <span class="text-xs font-bold text-smart-text-muted uppercase">Subscribe to Updates</span>
+                        <button @click="closeSubscribeModal" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div class="text-center py-4">
+                            <div class="text-4xl mb-2">📬</div>
+                            <h3 class="text-lg font-bold">Get Event Alerts</h3>
+                            <p class="text-sm text-smart-text-muted mt-1">Receive a batch digest whenever new AI events are discovered.</p>
+                        </div>
+                        <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+                            <p class="text-[11px] font-semibold text-indigo-800">With a free subscription you can also:</p>
+                            <div class="flex items-start gap-2">
+                                <span class="text-sm shrink-0">🙈</span>
+                                <span class="text-[11px] text-indigo-700"><strong>Hide events</strong> you're not interested in — they stay hidden across all your devices</span>
+                            </div>
+                            <div class="flex items-start gap-2">
+                                <span class="text-sm shrink-0">🔄</span>
+                                <span class="text-[11px] text-indigo-700"><strong>Restore your view</strong> — your preferences sync automatically when you enter your email</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-smart-text-muted uppercase block mb-2">Email Address</label>
+                            <input v-model="subscribeEmail" type="email" placeholder="you@example.com" @keyup.enter="subscribe"
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                   :disabled="subscribeLoading">
+                        </div>
+                        <div v-if="subscribeMessage" :class="subscribeMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'"
+                             class="p-3 rounded-xl text-sm font-medium">
+                            {{ subscribeMessage.text }}
+                        </div>
+                        <div class="space-y-3">
+                            <button @click="subscribe" :disabled="subscribeLoading"
+                                    class="w-full py-3 bg-smart-primary text-white rounded-xl font-bold text-sm hover:bg-smart-primary-dark transition-colors disabled:opacity-50">
+                                <span v-if="subscribeLoading">Signing up...</span>
+                                <span v-else>Get Alerts</span>
+                            </button>
+                            <p class="text-[11px] text-smart-text-muted text-center">
+                                Already getting alerts?
+                                <button @click="unsubscribe" :disabled="subscribeLoading" class="text-smart-primary hover:underline font-medium">Unsubscribe</button>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Hidden Events Management Panel - bottom sheet on mobile, right-slide on desktop -->
+            <!-- Mobile backdrop -->
+            <div v-if="showHiddenPanel && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="showHiddenPanel=false"></div>
+            <transition :name="isMobile ? 'slide-up' : 'slide'">
+                <div v-if="showHiddenPanel" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
+                    <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
+                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+                    </div>
+                    <div :class="isMobile ? 'px-5 pb-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl shrink-0' : 'p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50'">
+                        <span class="text-xs font-bold text-smart-text-muted uppercase">Hidden Events</span>
+                        <button @click="showHiddenPanel=false" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div v-if="hiddenEvents.length === 0" class="text-center py-12 text-smart-text-muted">
+                            <p class="text-3xl mb-2">🙈</p>
+                            <p class="text-sm font-medium">No hidden events</p>
+                            <p class="text-[11px] mt-1">Events you hide will appear here.</p>
+                        </div>
+                        <div v-else class="space-y-2">
+                            <div v-for="he in hiddenEvents" :key="he.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                <div class="flex-1 min-w-0 pr-2">
+                                    <p class="text-xs font-bold truncate">{{ he.title }}</p>
+                                    <p class="text-[10px] text-smart-text-muted">{{ he.date }}</p>
+                                </div>
+                                <button @click="doUnhide(he.id)" class="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-smart-primary hover:bg-indigo-50 hover:border-indigo-200 transition-colors shrink-0">
+                                    Unhide
+                                </button>
+                            </div>
+                            <button @click="doUnhideAll" class="w-full mt-4 py-2.5 border border-red-200 text-red-500 rounded-xl text-[11px] font-bold hover:bg-red-50 transition-colors">
+                                Unhide All Events
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Feedback Modal - bottom sheet on mobile, right-slide on desktop -->
+            <!-- Mobile backdrop -->
+            <div v-if="showFeedbackModal && isMobile" class="fixed inset-0 z-40 backdrop-overlay md:hidden" @click="closeFeedbackModal"></div>
+            <transition :name="isMobile ? 'slide-up' : 'slide'">
+                <div v-if="showFeedbackModal" :class="isMobile ? 'fixed inset-x-0 bottom-0 z-50 bg-smart-surface shadow-2xl rounded-t-2xl max-h-[85vh] flex flex-col' : 'absolute inset-y-0 right-0 w-full md:w-96 bg-smart-surface shadow-2xl border-l border-gray-200 z-50 flex flex-col'">
+                    <div v-if="isMobile" class="flex justify-center pt-2 pb-1 shrink-0">
+                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+                    </div>
+                    <div :class="isMobile ? 'px-5 pb-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl shrink-0' : 'p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50'">
+                        <span class="text-xs font-bold text-smart-text-muted uppercase">Send Feedback</span>
+                        <button @click="closeFeedbackModal" class="p-2 hover:bg-gray-200 rounded-full">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div class="text-center py-4">
+                            <div class="text-4xl mb-2">💬</div>
+                            <h3 class="text-lg font-bold">We'd love to hear from you</h3>
+                            <p class="text-sm text-smart-text-muted mt-1">Report a bug, suggest a missing talk, request a feature, or share general feedback.</p>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-smart-text-muted uppercase block mb-2">Category</label>
+                            <select v-model="feedbackCategory"
+                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-white">
+                                <option value="" disabled>Select a category</option>
+                                <option value="Bug Report">🐛 Bug Report</option>
+                                <option value="Missing Talk/Event">📅 Missing Talk/Event</option>
+                                <option value="Feature Request">✨ Feature Request</option>
+                                <option value="General Feedback">💡 General Feedback</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-smart-text-muted uppercase block mb-2">Message</label>
+                            <textarea v-model="feedbackMessage"
+                                      placeholder="Describe your feedback..."
+                                      class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                                      rows="6"
+                                      :disabled="feedbackLoading"></textarea>
+                        </div>
+                        <div v-if="feedbackStatus" :class="feedbackStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'"
+                             class="p-3 rounded-xl text-sm font-medium">
+                            {{ feedbackStatus.text }}
+                        </div>
+                        <button @click="submitFeedback" :disabled="feedbackLoading"
+                                class="w-full py-3 bg-smart-primary text-white rounded-xl font-bold text-sm hover:bg-smart-primary-dark transition-colors disabled:opacity-50">
+                            <span v-if="feedbackLoading">Sending...</span>
+                            <span v-else>Submit</span>
+                        </button>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Hide confirmation modal -->
+            <div v-if="hideConfirm" class="fixed inset-0 z-50 flex items-end md:items-center justify-center" @click="hideConfirm=null">
+                <div class="fixed inset-0 backdrop-overlay"></div>
+                <div class="relative bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-5 w-full md:max-w-sm mx-0 md:mx-4" @click.stop>
+                    <div class="flex justify-center pt-1 pb-2 md:hidden">
+                        <div class="w-10 h-1 rounded-full bg-gray-300"></div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl mb-2">🙈</div>
+                        <h3 class="text-sm font-bold text-smart-text-main mb-1">Hide this event?</h3>
+                        <p class="text-xs text-smart-text-muted mb-4">It won't appear in your event list anymore. You can manage hidden events from the menu.</p>
+                        <button @click="confirmHide(hideConfirm); hideConfirm=null" class="w-full py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors mb-2">
+                            Hide Event
+                        </button>
+                        <button @click="hideConfirm=null" class="w-full py-2.5 bg-gray-100 text-smart-text-main rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
+                            Cancel
+                        </button>
+                        <label class="flex items-center justify-center gap-1.5 mt-3 cursor-pointer">
+                            <input type="checkbox" v-model="hideDontAskAgain" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-[11px] text-smart-text-muted">Don't show this again</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Bottom Navigation -->
+            <nav class="md:hidden h-16 bg-smart-surface border-t border-gray-200 flex items-center justify-around px-1 shrink-0 z-40 relative">
+                <button @click="view='dashboard'" :class="view==='dashboard'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full h-full transition-colors touch-active-btn">
+                    <span class="text-lg leading-none">🏠</span>
+                    <span class="text-[10px] mt-0.5 font-medium">Dashboard</span>
                 </button>
-                <button @click="view='timeline'" :class="view==='timeline'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
-                    <span class="text-xs">📅</span><span class="text-xs mt-1">Timeline</span>
+                <button @click="view='calendar'" :class="view==='calendar'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full h-full transition-colors touch-active-btn">
+                    <span class="text-lg leading-none">📅</span>
+                    <span class="text-[10px] mt-0.5 font-medium">Calendar</span>
                 </button>
-                <button @click="view='calendar'" :class="view==='calendar'?'text-smart-primary':'text-smart-text-muted'" class="flex flex-col items-center justify-center w-full">
-                    <span class="text-xs">🗓</span><span class="text-xs mt-1">Calendar</span>
+                <button @click="searchExpanded=true; setTimeout(()=>searchInput?.focus(),50)" class="flex flex-col items-center justify-center w-full h-full transition-colors touch-active-btn text-smart-text-muted hover:text-smart-primary">
+                    <span class="text-lg leading-none">🔍</span>
+                    <span class="text-[10px] mt-0.5 font-medium">Search</span>
+                </button>
+                <button @click="showDrawer=true" class="flex flex-col items-center justify-center w-full h-full transition-colors touch-active-btn text-smart-text-muted hover:text-smart-primary">
+                    <span class="text-lg leading-none">☰</span>
+                    <span class="text-[10px] mt-0.5 font-medium">Menu</span>
                 </button>
             </nav>
         </main>
+
+        <!-- Drawer Menu (mobile) -->
+        <transition name="drawer">
+            <div v-if="showDrawer" class="fixed inset-0 z-50 flex md:hidden">
+                <div class="fixed inset-0 backdrop-overlay" @click="closeDrawer"></div>
+                <aside class="relative w-64 max-w-[80vw] bg-smart-surface h-full shadow-2xl flex flex-col z-10">
+                    <div class="p-5 border-b border-gray-100">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-xl font-bold text-smart-primary cursor-pointer" @click="view='dashboard'; clearFilter(); search=''; closeDrawer()">The AI Register</h1>
+                                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">📍 London</span>
+                            </div>
+                            <button @click="closeDrawer" class="p-1.5 hover:bg-gray-100 rounded-full text-sm">✕</button>
+                        </div>
+                        <p class="text-xs text-smart-text-muted mt-1">Live Events Radar</p>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div>
+                            <template v-if="!subscriberEmail">
+                                <p class="text-[10px] font-bold text-smart-text-muted uppercase mb-1.5">Restore Saved View</p>
+                                <div class="flex gap-1.5">
+                                    <input v-model="restoreEmail" type="email" placeholder="your@email.com"
+                                           class="flex-1 min-w-0 px-2.5 py-1.5 border border-gray-200 rounded-lg text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                           :disabled="restoreLoading" @keyup.enter="doRestore(); closeDrawer()">
+                                    <button @click="doRestore(); closeDrawer()" :disabled="restoreLoading"
+                                            class="px-3 py-1.5 bg-gray-100 text-smart-text-main rounded-lg text-[11px] font-bold hover:bg-gray-200 transition-colors shrink-0">
+                                        <span v-if="restoreLoading">...</span>
+                                        <span v-else>Restore</span>
+                                    </button>
+                                </div>
+                                <p class="text-[9px] text-smart-text-muted mt-1 leading-tight">Enter your subscription email to sync your hidden events across devices.</p>
+                                <div v-if="restoreMessage" :class="restoreMessage.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
+                                     class="mt-1.5 p-1.5 rounded-lg text-[10px] font-medium">
+                                    {{ restoreMessage.text }}
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[10px]">✅</span>
+                                    <span class="text-[10px] font-medium text-smart-text-main truncate">Restored</span>
+                                </div>
+                                <div class="flex items-center justify-between mt-0.5">
+                                    <span class="text-[9px] text-smart-text-muted truncate">{{ subscriberEmail }}</span>
+                                    <button @click="clearRestore(); closeDrawer()" class="text-[9px] text-smart-primary hover:underline font-medium shrink-0">Clear</button>
+                                </div>
+                            </template>
+                        </div>
+                        <hr class="border-gray-100">
+                        <button v-if="subscriberEmail" @click="refreshHiddenEvents(); showHiddenPanel=true; detail=null; closeDrawer()"
+                                class="w-full flex items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-[11px] bg-gray-100 text-smart-text-main hover:bg-gray-200 touch-active-btn">
+                            Manage Hidden ({{ hiddenIds.size }})
+                        </button>
+                        <button @click="showSubscribeModal=true; closeDrawer()"
+                                class="w-full flex items-center justify-center px-4 py-3 rounded-xl transition-all duration-200 font-medium bg-smart-accent text-white hover:bg-emerald-600 shadow-sm touch-active-btn">
+                            Subscribe to Updates
+                        </button>
+                        <button @click="showFeedbackModal=true; closeDrawer()"
+                                class="w-full flex items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-[11px] bg-gray-100 text-smart-text-main hover:bg-indigo-50 hover:text-smart-primary hover:border-indigo-200 border border-gray-200 touch-active-btn">
+                            💬 Feedback &amp; Feature Requests
+                        </button>
+                    </div>
+                </aside>
+            </div>
+        </transition>
     </div>
 
     <script>
-        const { createApp, ref, onMounted, computed } = Vue;
+        const { createApp, ref, onMounted, computed, onUnmounted } = Vue;
 
         createApp({
             setup() {
@@ -187,6 +638,53 @@
                 const search = ref('');
                 const detail = ref(null);
                 const calMonth = ref(new Date());
+                const showSubscribeModal = ref(false);
+                const subscribeEmail = ref('');
+                const subscribeLoading = ref(false);
+                const subscribeMessage = ref(null);
+                const dayFilter = ref(null);
+                const rangeFilter = ref(null);
+
+                // Hidden events state
+                const subscriberEmail = ref(localStorage.getItem('subscriber_email') || '');
+                const hideConfirm = ref(null);
+                const hideDontAskAgain = ref(localStorage.getItem('hide_dont_ask') === 'true');
+                const hiddenIds = ref(new Set());
+                const restoreEmail = ref('');
+                const restoreLoading = ref(false);
+                const restoreMessage = ref(null);
+                const showHiddenPanel = ref(false);
+                const hiddenEvents = ref([]);
+
+                // Mobile-specific state
+                const isMobile = ref(window.innerWidth < 768);
+                const showDrawer = ref(false);
+                const searchExpanded = ref(false);
+                const searchInput = ref(null);
+                const activeTooltip = ref(null); // id of event whose tooltip is visible
+
+                // Pull-to-refresh state
+                const pullRefreshOffset = ref(0);
+                const pullRefreshing = ref(false);
+                const touchStart = ref({ y: 0, x: 0 });
+                const touchState = ref(null); // null, 'pull', 'swipe'
+                const swipeEl = ref(null);
+
+                // Feedback state
+                const showFeedbackModal = ref(false);
+                const feedbackCategory = ref('');
+                const feedbackMessage = ref('');
+                const feedbackLoading = ref(false);
+                const feedbackStatus = ref(null);
+
+                // API base URL: configurable via window.__API_BASE__.
+                // In dev (frontend on :8081, API on :8082), defaults to localhost:8082.
+                // In production (same origin via reverse proxy), defaults to window.location.origin.
+                const API_BASE = window.__API_BASE__ || (
+                    window.location.hostname === 'localhost' && window.location.port === '8081'
+                        ? 'http://localhost:8082'
+                        : window.location.origin
+                );
 
                 const norm = (s) => {
                     if (!s) return '';
@@ -196,15 +694,265 @@
                     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                 };
 
-                const fetchEvents = async () => {
+                const fetchEvents = async (email) => {
                     loading.value = true;
                     try {
-                        const r = await fetch('http://localhost:8082/events');
+                        let url = `${API_BASE}/events`;
+                        if (email) {
+                            url += `?subscriber_email=${encodeURIComponent(email)}`;
+                        }
+                        const r = await fetch(url);
                         const data = await r.json();
                         events.value = Array.isArray(data) ? data : [];
                     } catch(e) { console.error(e); }
                     finally { loading.value = false; }
                 };
+
+                const fetchHiddenIds = async (email) => {
+                    if (!email) return;
+                    try {
+                        const r = await fetch(`${API_BASE}/events/hidden?subscriber_email=${encodeURIComponent(email)}`);
+                        const data = await r.json();
+                        if (Array.isArray(data)) {
+                            hiddenIds.value = new Set(data.map(e => e.id));
+                        }
+                    } catch(e) { console.error('Failed to fetch hidden IDs:', e); }
+                };
+
+                const doRestore = async () => {
+                    const email = restoreEmail.value.trim().toLowerCase();
+                    if (!email) {
+                        restoreMessage.value = { type: 'error', text: 'Please enter your email address.' };
+                        return;
+                    }
+                    restoreLoading.value = true;
+                    restoreMessage.value = null;
+                    try {
+                        const r = await fetch(`${API_BASE}/events/check-subscriber?email=${encodeURIComponent(email)}`);
+                        const data = await r.json();
+                        if (data.active) {
+                            subscriberEmail.value = email;
+                            localStorage.setItem('subscriber_email', email);
+                            restoreEmail.value = '';
+                            restoreMessage.value = null;
+                            await fetchHiddenIds(email);
+                            await fetchEvents(email);
+                        } else {
+                            restoreMessage.value = { type: 'error', text: 'No subscription found for this email. Subscribe below to get started.' };
+                        }
+                    } catch(e) {
+                        restoreMessage.value = { type: 'error', text: 'Could not connect to server.' };
+                    } finally {
+                        restoreLoading.value = false;
+                    }
+                };
+
+                const clearRestore = () => {
+                    subscriberEmail.value = '';
+                    localStorage.removeItem('subscriber_email');
+                    hiddenIds.value = new Set();
+                    restoreMessage.value = null;
+                    fetchEvents();
+                };
+
+                const confirmHide = async (eventId) => {
+                    if (hideDontAskAgain.value) {
+                        localStorage.setItem('hide_dont_ask', 'true');
+                    }
+                    await performHide(eventId);
+                };
+                const doHide = async (eventId) => {
+                    if (!hideDontAskAgain.value && subscriberEmail.value) {
+                        hideConfirm.value = eventId;
+                        return;
+                    }
+                    await performHide(eventId);
+                };
+                const performHide = async (eventId) => {
+                    // If not connected, prompt to subscribe
+                    if (!subscriberEmail.value) {
+                        showSubscribeModal.value = true;
+                        return;
+                    }
+                    try {
+                        const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
+                        if (r.ok) {
+                            const s = new Set(hiddenIds.value);
+                            s.add(eventId);
+                            hiddenIds.value = s;
+                            // Also hide in the events list so it disappears immediately
+                            events.value = events.value.filter(e => e.id !== eventId);
+                            if (detail.value && detail.value.id === eventId) {
+                                detail.value = null;
+                            }
+                        }
+                    } catch(e) { console.error('Hide failed:', e); }
+                };
+
+                const doUnhide = async (eventId) => {
+                    try {
+                        const r = await fetch(`${API_BASE}/events/${eventId}/unhide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
+                        if (r.ok) {
+                            const s = new Set(hiddenIds.value);
+                            s.delete(eventId);
+                            hiddenIds.value = s;
+                            hiddenEvents.value = hiddenEvents.value.filter(e => e.id !== eventId);
+                            await fetchEvents(subscriberEmail.value);
+                        }
+                    } catch(e) { console.error('Unhide failed:', e); }
+                };
+
+                const doUnhideAll = async () => {
+                    try {
+                        const r = await fetch(`${API_BASE}/events/unhide-all?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
+                        const data = await r.json();
+                        if (r.ok) {
+                            hiddenIds.value = new Set();
+                            hiddenEvents.value = [];
+                            await fetchEvents(subscriberEmail.value);
+                        }
+                    } catch(e) { console.error('Unhide all failed:', e); }
+                };
+
+                const refreshHiddenEvents = async () => {
+                    if (!subscriberEmail.value) return;
+                    try {
+                        const r = await fetch(`${API_BASE}/events/hidden?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`);
+                        const data = await r.json();
+                        hiddenEvents.value = Array.isArray(data) ? data : [];
+                    } catch(e) { console.error('Failed to fetch hidden events:', e); }
+                };
+
+                // Resize handler for isMobile
+                const onResize = () => {
+                    isMobile.value = window.innerWidth < 768;
+                    if (!isMobile.value) {
+                        showDrawer.value = false;
+                    }
+                };
+                window.addEventListener('resize', onResize);
+                onUnmounted(() => window.removeEventListener('resize', onResize));
+
+                // Close drawer helper
+                const closeDrawer = () => { showDrawer.value = false; };
+
+                // Toggle score tooltip on mobile (tap-to-reveal)
+                const toggleTooltip = (id) => {
+                    if (activeTooltip.value === id) {
+                        activeTooltip.value = null;
+                    } else {
+                        activeTooltip.value = id;
+                    }
+                };
+
+                // Pull-to-refresh touch handlers
+                let ptrInitialY = 0;
+                let ptrActive = false;
+
+                const onTouchStart = (e) => {
+                    const touch = e.touches[0];
+                    touchStart.value = { y: touch.clientY, x: touch.clientX };
+                    ptrInitialY = touch.clientY;
+                    ptrActive = false;
+                    touchState.value = null;
+                };
+
+                const onTouchMove = (e) => {
+                    if (pullRefreshing.value) return;
+                    const touch = e.touches[0];
+                    const deltaY = touch.clientY - ptrInitialY;
+
+                    if (touchState.value === null) {
+                        const deltaX = touch.clientX - touchStart.value.x;
+                        if (Math.abs(deltaY) > 10 && deltaY > 0) {
+                            touchState.value = 'pull';
+                        } else if (Math.abs(deltaX) > 10) {
+                            touchState.value = 'swipe';
+                            touchStart.value.x = touch.clientX; // track swipe end position
+                        } else {
+                            return;
+                        }
+                    }
+
+                    if (touchState.value === 'pull') {
+                        const scrollEl = document.querySelector('.main-scroll');
+                        if (!scrollEl || scrollEl.scrollTop > 0) return;
+                        e.preventDefault();
+                        pullRefreshOffset.value = Math.min(deltaY * 0.5, 120);
+                        ptrActive = true;
+                    }
+                };
+
+                const onTouchEnd = () => {
+                    if (ptrActive && pullRefreshOffset.value >= 60) {
+                        pullRefreshing.value = true;
+                        pullRefreshOffset.value = 60;
+                        fetchEvents(subscriberEmail.value || undefined).then(() => {
+                            setTimeout(() => {
+                                pullRefreshing.value = false;
+                                pullRefreshOffset.value = 0;
+                            }, 300);
+                        });
+                    } else {
+                        pullRefreshOffset.value = 0;
+                    }
+
+                    // Swipe-to-dismiss: check for leftward swipe on event card
+                    if (touchState.value === 'swipe') {
+                        const deltaX = touchStart.value.x - (touchStart.value.x);
+                        // Approximate swipe distance by checking touch position
+                        if (touchStart.value.x > 0) {
+                            const el = document.elementFromPoint(touchStart.value.x, touchStart.value.y);
+                            if (el) {
+                                const card = el.closest('.group\\/card');
+                                if (card) {
+                                    const hideBtn = card.querySelector('[title="Hide event"]');
+                                    if (hideBtn) hideBtn.click();
+                                }
+                            }
+                        }
+                    }
+
+                    ptrActive = false;
+                    touchState.value = null;
+                };
+
+                // Drag-to-dismiss for bottom sheets
+                const sheetTouchStart = ref(null);
+                const onSheetTouchStart = (e) => {
+                    sheetTouchStart.value = { y: e.touches[0].clientY };
+                };
+                const onSheetTouchMove = (e, closeFn) => {
+                    if (!sheetTouchStart.value) return;
+                    const deltaY = e.touches[0].clientY - sheetTouchStart.value.y;
+                    if (deltaY > 50) {
+                        closeFn();
+                        sheetTouchStart.value = null;
+                    }
+                };
+
+                // Auto-validate stored email on mount
+                onMounted(async () => {
+                    const storedEmail = localStorage.getItem('subscriber_email');
+                    if (storedEmail) {
+                        try {
+                            const r = await fetch(`${API_BASE}/events/check-subscriber?email=${encodeURIComponent(storedEmail)}`);
+                            const data = await r.json();
+                            if (data.active) {
+                                subscriberEmail.value = storedEmail;
+                                await fetchHiddenIds(storedEmail);
+                                await fetchEvents(storedEmail);
+                            } else {
+                                localStorage.removeItem('subscriber_email');
+                                await fetchEvents();
+                            }
+                        } catch(e) {
+                            await fetchEvents();
+                        }
+                    } else {
+                        await fetchEvents();
+                    }
+                });
 
                 const filtered = computed(() => {
                     let list = [...events.value];
@@ -213,9 +961,19 @@
                         list = list.filter(e =>
                             (e.title||'').toLowerCase().includes(q) ||
                             (e.institution||'').toLowerCase().includes(q) ||
-                            (e.location||'').toLowerCase().includes(q) ||
-                            norm(e.date) === q
+                            (e.location||'').toLowerCase().includes(q)
                         );
+                    }
+                    if (dayFilter.value) {
+                        list = list.filter(e => norm(e.date) === dayFilter.value);
+                    }
+                    if (rangeFilter.value) {
+                        const start = new Date(rangeFilter.value.start);
+                        const end = new Date(rangeFilter.value.end);
+                        list = list.filter(e => {
+                            const d = new Date(e.date);
+                            return d >= start && d <= end;
+                        });
                     }
                     return list;
                 });
@@ -228,6 +986,36 @@
 
                 const monthName = computed(() => calMonth.value.toLocaleString('default',{month:'long'}));
                 const calYear = computed(() => calMonth.value.getFullYear());
+
+                const thisWeekEvts = computed(() => {
+                    const now = new Date();
+                    const weekEnd = new Date(now.getTime() + 7*24*60*60*1000);
+                    return events.value.filter(e => {
+                        const d = new Date(e.date);
+                        return d >= now && d <= weekEnd;
+                    });
+                });
+
+                const thisWeek = computed(() => thisWeekEvts.value.length);
+
+                const thisMonthEvts = computed(() => {
+                    const now = new Date();
+                    return events.value.filter(e => {
+                        const d = new Date(e.date);
+                        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                    });
+                });
+
+                const thisMonth = computed(() => thisMonthEvts.value.length);
+
+                const scoreTooltipText = 'Scores (0–10) are AI-generated based on relevance, timeliness, and event prominence.';
+
+                const highlights = computed(() => {
+                    return events.value
+                        .filter(e => new Date(e.date) >= new Date())
+                        .sort((a, b) => b.score - a.score)
+                        .slice(0, 3);
+                });
 
                 const evtMap = computed(() => {
                     const m = {};
@@ -251,17 +1039,171 @@
                 });
 
                 const calShift = (n) => { calMonth.value = new Date(calMonth.value.getFullYear(), calMonth.value.getMonth()+n, 1); };
+                const isDayActive = (day) => {
+                    if (!day || !dayFilter.value) return false;
+                    const y = calMonth.value.getFullYear();
+                    const m = String(calMonth.value.getMonth()+1).padStart(2,'0');
+                    const dateStr = `${y}-${m}-${String(day).padStart(2,'0')}`;
+                    return dayFilter.value === dateStr;
+                };
+                const filterToWeek = () => {
+                    const now = new Date();
+                    const end = new Date(now.getTime() + 7*24*60*60*1000);
+                    rangeFilter.value = { start: now.toISOString(), end: end.toISOString() };
+                    dayFilter.value = null;
+                };
+                const filterToMonth = () => {
+                    const now = new Date();
+                    const end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+                    rangeFilter.value = { start: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), end: end.toISOString() };
+                    dayFilter.value = null;
+                };
+                const clearFilter = () => {
+                    dayFilter.value = null;
+                    rangeFilter.value = null;
+                };
                 const onDayClick = (day) => {
                     if (!day) return;
                     const y = calMonth.value.getFullYear();
                     const m = String(calMonth.value.getMonth()+1).padStart(2,'0');
-                    search.value = `${y}-${m}-${String(day).padStart(2,'0')}`;
+                    const dateStr = `${y}-${m}-${String(day).padStart(2,'0')}`;
+                    if (dayFilter.value === dateStr) {
+                        dayFilter.value = null;
+                    } else {
+                        dayFilter.value = dateStr;
+                    }
                     view.value = 'dashboard';
                 };
 
-                onMounted(fetchEvents);
+                const subscribe = async () => {
+                    const email = subscribeEmail.value.trim();
+                    if (!email) {
+                        subscribeMessage.value = { type: 'error', text: 'Please enter an email address.' };
+                        return;
+                    }
+                    subscribeLoading.value = true;
+                    subscribeMessage.value = null;
+                    try {
+                        const r = await fetch(`${API_BASE}/subscribe`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        const data = await r.json();
+                        if (data.success) {
+                            subscribeMessage.value = { type: 'success', text: data.message };
+                            // Auto-connect after subscribe
+                            subscriberEmail.value = email.toLowerCase();
+                            localStorage.setItem('subscriber_email', email.toLowerCase());
+                            await fetchHiddenIds(email.toLowerCase());
+                            await fetchEvents(email.toLowerCase());
+                            setTimeout(() => { showSubscribeModal.value = false; subscribeEmail.value = ''; subscribeMessage.value = null; }, 1500);
+                        } else {
+                            subscribeMessage.value = { type: 'error', text: data.error || 'Subscription failed.' };
+                        }
+                    } catch(e) {
+                        subscribeMessage.value = { type: 'error', text: 'Could not connect to server.' };
+                    } finally {
+                        subscribeLoading.value = false;
+                    }
+                };
 
-                return { events, loading, view, search, detail, filtered, scoreClass, monthName, calYear, calCells, calShift, onDayClick };
+                const unsubscribe = async () => {
+                    const email = subscribeEmail.value.trim();
+                    if (!email) {
+                        subscribeMessage.value = { type: 'error', text: 'Please enter your email address to unsubscribe.' };
+                        return;
+                    }
+                    subscribeLoading.value = true;
+                    subscribeMessage.value = null;
+                    try {
+                        const r = await fetch(`${API_BASE}/unsubscribe`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        const data = await r.json();
+                        if (data.success) {
+                            subscribeMessage.value = { type: 'success', text: data.message };
+                            // Clear stored state if this email was connected
+                            if (subscriberEmail.value === email.toLowerCase()) {
+                                clearRestore();
+                            }
+                            setTimeout(() => { showSubscribeModal.value = false; subscribeEmail.value = ''; subscribeMessage.value = null; }, 1500);
+                        } else {
+                            subscribeMessage.value = { type: 'error', text: data.error || 'Unsubscribe failed.' };
+                        }
+                    } catch(e) {
+                        subscribeMessage.value = { type: 'error', text: 'Could not connect to server.' };
+                    } finally {
+                        subscribeLoading.value = false;
+                    }
+                };
+
+                const closeSubscribeModal = () => {
+                    showSubscribeModal.value = false;
+                    subscribeEmail.value = '';
+                    subscribeMessage.value = null;
+                };
+
+                const submitFeedback = async () => {
+                    const category = feedbackCategory.value;
+                    const message = feedbackMessage.value.trim();
+                    
+                    if (!category) {
+                        feedbackStatus.value = { type: 'error', text: 'Please select a category.' };
+                        return;
+                    }
+                    if (!message) {
+                        feedbackStatus.value = { type: 'error', text: 'Please enter a message.' };
+                        return;
+                    }
+                    
+                    feedbackLoading.value = true;
+                    feedbackStatus.value = null;
+                    
+                    try {
+                        const r = await fetch(`${API_BASE}/api/feedback`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ category, message })
+                        });
+                        const data = await r.json();
+                        if (r.ok && data.success) {
+                            feedbackStatus.value = { type: 'success', text: data.message };
+                            setTimeout(() => {
+                                closeFeedbackModal();
+                            }, 1500);
+                        } else {
+                            feedbackStatus.value = { type: 'error', text: data.detail || 'Failed to send feedback.' };
+                        }
+                    } catch (e) {
+                        feedbackStatus.value = { type: 'error', text: 'Could not connect to server.' };
+                    } finally {
+                        feedbackLoading.value = false;
+                    }
+                };
+
+                const closeFeedbackModal = () => {
+                    showFeedbackModal.value = false;
+                    feedbackCategory.value = '';
+                    feedbackMessage.value = '';
+                    feedbackStatus.value = null;
+                };
+
+                // Watch for hidden panel opening to refresh list
+                const origShowHiddenPanel = showHiddenPanel;
+                // We'll refresh hidden events whenever the panel is about to open
+                // by intercepting the click in template
+
+                return { events, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
+                    subscriberEmail, hiddenIds, restoreEmail, restoreLoading, restoreMessage, showHiddenPanel, hiddenEvents,
+                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents, hideConfirm, hideDontAskAgain, confirmHide,
+                    showFeedbackModal, feedbackCategory, feedbackMessage, feedbackLoading, feedbackStatus,
+                    submitFeedback, closeFeedbackModal,
+                    isMobile, showDrawer, closeDrawer, searchExpanded, searchInput, activeTooltip, toggleTooltip,
+                    pullRefreshOffset, pullRefreshing, onTouchStart, onTouchMove, onTouchEnd,
+                    onSheetTouchStart, onSheetTouchMove, sheetTouchStart };
             }
         }).mount('#app');
     </script>
