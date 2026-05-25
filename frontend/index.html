@@ -192,7 +192,7 @@
                     <div v-if="!dayFilter && !rangeFilter" class="mb-6">
                         <h3 class="text-sm font-bold text-smart-text-main mb-3">Highlights</h3>
                         <div v-if="highlights.length" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div v-for="e in highlights" :key="e.id" @click="detail=e" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer group/highlight touch-active">
+                            <div v-for="e in highlights" :key="e.id" :data-event-id="e.id" @click="detail=e" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer group/highlight touch-active">
                                 <div class="flex justify-between items-start mb-2">
                                     <span class="relative inline-flex items-center group/tip">
                                         <span :class="scoreClass(e.score)" class="text-[10px] font-black px-2 py-0.5 rounded-full">{{ e.score }}</span>
@@ -240,8 +240,8 @@
                         No events in this period
                     </div>
                     <div v-else class="grid gap-3 grid-cols-1">
-                        <div v-for="e in filtered" :key="e.id" class="bg-smart-surface md:p-4 p-3 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all flex items-start md:space-x-3 space-x-2 group/card touch-active">
-                            <div @click="detail=e" class="flex items-start md:space-x-3 space-x-2 flex-1 min-w-0 cursor-pointer">
+                        <div v-for="e in filtered" :key="e.id" :data-event-id="e.id" @click="detail=e" class="bg-smart-surface md:p-4 p-3 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-200 transition-all flex items-start md:space-x-3 space-x-2 group/card touch-active cursor-pointer">
+                            <div class="flex items-start md:space-x-3 space-x-2 flex-1 min-w-0 cursor-pointer">
                                 <div class="hidden md:flex w-12 h-12 rounded-xl bg-indigo-50 flex flex-col items-center justify-center text-smart-primary shrink-0">
                                     <span class="text-[10px] font-bold uppercase leading-none">{{ e.date ? e.date.substring(5,7) : '--' }}</span>
                                     <span class="text-base font-black leading-none mt-0.5">{{ e.date ? parseInt(e.date.substring(8,10)).toString() : '--' }}</span>
@@ -350,7 +350,7 @@
                             <p class="text-sm text-gray-600">{{ detail.description || 'No description available.' }}</p>
                         </div>
                         <div class="pt-4 border-t space-y-2">
-                            <button v-if="!hiddenIds.has(detail.id)" @click="doHide(detail.id); detail=null"
+                            <button v-if="!hiddenIds.has(detail.id)" @click="doHide(detail.id, true)"
                                     class="w-full flex items-center justify-center py-3 bg-white text-smart-text-muted border border-gray-200 rounded-xl font-bold text-sm hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
                                 Hide Event
                             </button>
@@ -629,6 +629,9 @@
                 const showHiddenPanel = ref(false);
                 const hiddenEvents = ref([]);
 
+                // Guard to prevent double-click on hide
+                const hideLoading = ref(new Set()); // Set of eventIds currently being hidden
+
                 // Mobile-specific state
                 const isMobile = ref(window.innerWidth < 768);
                 const showDrawer = ref(false);
@@ -737,31 +740,45 @@
                     document.body.appendChild(toast);
                     setTimeout(() => toast.remove(), 3000);
                 };
-                const doHide = async (eventId) => {
+                const dimCards = (eventId, opacity) => {
+                    document.querySelectorAll(`[data-event-id="${eventId}"]`).forEach(el => {
+                        el.style.opacity = opacity;
+                    });
+                };
+                const doHide = async (eventId, closePanel) => {
                     if (!subscriberEmail.value) {
                         showSubscribeModal.value = true;
                         return;
                     }
-                    const targetEl = document.querySelector(`[data-event-id="${eventId}"]`);
-                    if (targetEl) targetEl.style.opacity = '0.4';
+                    // Guard against double-clicks on the same event;
+                    // still dim the card(s) as visual feedback
+                    if (hideLoading.value.has(eventId)) {
+                        dimCards(eventId, '0.4');
+                        return;
+                    }
+                    hideLoading.value.add(eventId);
+                    dimCards(eventId, '0.4');
                     try {
                         const r = await fetch(`${API_BASE}/events/${eventId}/hide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
                         if (r.ok) {
-                            const s = new Set(hiddenIds.value);
-                            s.add(eventId);
-                            hiddenIds.value = s;
+                            hiddenIds.value.add(eventId);
                             events.value = events.value.filter(e => e.id !== eventId);
                             if (detail.value && detail.value.id === eventId) {
                                 detail.value = null;
                             }
+                            if (closePanel) {
+                                detail.value = null;
+                            }
                         } else {
-                            if (targetEl) targetEl.style.opacity = '';
+                            dimCards(eventId, '');
                             showError('Could not hide event. Please try again.');
                         }
                     } catch(e) {
-                        if (targetEl) targetEl.style.opacity = '';
+                        dimCards(eventId, '');
                         showError('Network error. Please check your connection.');
                         console.error('Hide failed:', e);
+                    } finally {
+                        hideLoading.value.delete(eventId);
                     }
                 };
 
@@ -769,9 +786,7 @@
                     try {
                         const r = await fetch(`${API_BASE}/events/${eventId}/unhide?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
                         if (r.ok) {
-                            const s = new Set(hiddenIds.value);
-                            s.delete(eventId);
-                            hiddenIds.value = s;
+                            hiddenIds.value.delete(eventId);
                             hiddenEvents.value = hiddenEvents.value.filter(e => e.id !== eventId);
                             await fetchEvents(subscriberEmail.value);
                         }
@@ -781,8 +796,8 @@
                 const doUnhideAll = async () => {
                     try {
                         const r = await fetch(`${API_BASE}/events/unhide-all?subscriber_email=${encodeURIComponent(subscriberEmail.value)}`, { method: 'POST' });
-                        const data = await r.json();
                         if (r.ok) {
+                            await r.json(); // consume body
                             hiddenIds.value = new Set();
                             hiddenEvents.value = [];
                             await fetchEvents(subscriberEmail.value);
@@ -824,11 +839,13 @@
                 // Pull-to-refresh touch handlers
                 let ptrInitialY = 0;
                 let ptrActive = false;
+                let swipeStartX = 0;
 
                 const onTouchStart = (e) => {
                     const touch = e.touches[0];
                     touchStart.value = { y: touch.clientY, x: touch.clientX };
                     ptrInitialY = touch.clientY;
+                    swipeStartX = touch.clientX;
                     ptrActive = false;
                     touchState.value = null;
                 };
@@ -839,12 +856,11 @@
                     const deltaY = touch.clientY - ptrInitialY;
 
                     if (touchState.value === null) {
-                        const deltaX = touch.clientX - touchStart.value.x;
-                        if (Math.abs(deltaY) > 10 && deltaY > 0) {
+                        const deltaX = touch.clientX - swipeStartX;
+                        if (deltaY > 10) {
                             touchState.value = 'pull';
-                        } else if (Math.abs(deltaX) > 10) {
+                        } else if (Math.abs(deltaX) > 30) {
                             touchState.value = 'swipe';
-                            touchStart.value.x = touch.clientX; // track swipe end position
                         } else {
                             return;
                         }
@@ -859,7 +875,7 @@
                     }
                 };
 
-                const onTouchEnd = () => {
+                const onTouchEnd = (e) => {
                     if (ptrActive && pullRefreshOffset.value >= 60) {
                         pullRefreshing.value = true;
                         pullRefreshOffset.value = 60;
@@ -873,14 +889,14 @@
                         pullRefreshOffset.value = 0;
                     }
 
-                    // Swipe-to-dismiss: check for leftward swipe on event card
+                    // Swipe-to-dismiss: detect significant leftward swipe on event card
                     if (touchState.value === 'swipe') {
-                        const deltaX = touchStart.value.x - (touchStart.value.x);
-                        // Approximate swipe distance by checking touch position
-                        if (touchStart.value.x > 0) {
-                            const el = document.elementFromPoint(touchStart.value.x, touchStart.value.y);
+                        const touch = e.changedTouches[0];
+                        const deltaX = swipeStartX - touch.clientX;
+                        if (deltaX > 30) {
+                            const el = document.elementFromPoint(touch.clientX, touch.clientY);
                             if (el) {
-                                const card = el.closest('.group\\/card');
+                                const card = el.closest('.group\\/card') || el.closest('.group\\/highlight');
                                 if (card) {
                                     const hideBtn = card.querySelector('[title="Hide event"]');
                                     if (hideBtn) hideBtn.click();
@@ -1171,7 +1187,7 @@
 
                 return { events, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
                     subscriberEmail, hiddenIds, restoreEmail, restoreLoading, restoreMessage, showHiddenPanel, hiddenEvents,
-                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents,
+                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents, hideLoading,
                     showFeedbackModal, feedbackCategory, feedbackMessage, feedbackLoading, feedbackStatus,
                     submitFeedback, closeFeedbackModal,
                     isMobile, showDrawer, closeDrawer, searchExpanded, searchInput, activeTooltip, toggleTooltip,
