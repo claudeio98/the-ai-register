@@ -148,6 +148,97 @@ Copy `.env.example` to `.env` and configure:
 | `API_CALLS_PER_RUN` | `60` | Max Eventbrite API calls per run |
 | `API_DELAY_SECONDS` | `0.5` | Delay between API calls |
 
+## ☁️ Deployment
+
+The app runs on a Hetzner CX22 VPS (€3.99/mo, 2 vCPU, 4GB RAM). Architecture:
+
+```
+Cloudflare (DNS only) → Hetzner VPS (nginx on port 443/80) → Docker containers (frontend:8080, api:8082)
+```
+
+SSL is handled by Let's Encrypt (auto-renews via certbot). No Caddy in production.
+
+### SSH into the server
+
+```bash
+ssh root@167.233.44.167
+```
+
+### First-time setup (one-time)
+
+```bash
+# Install Docker
+apt update && apt install -y docker.io docker-compose-v2
+
+# Clone the repo
+cd /opt
+git clone https://github.com/claudeio98/the-ai-register.git ai-events-tracker
+cd ai-events-tracker
+
+# Create .env with API keys
+cat > .env << 'EOF'
+DOMAIN=the-ai-register.com
+OPENROUTER_API_KEY=<your-openrouter-key>
+BRAVE_API_KEY=<your-brave-key>
+GMAIL_USER=theairegister@gmail.com
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
+FEEDBACK_RECIPIENT=theairegister@gmail.com
+EOF
+
+# Create data directory
+mkdir -p data
+
+# Start all services
+docker compose up -d
+```
+
+Then set up nginx as a reverse proxy on the host:
+
+```bash
+# Install nginx + certbot
+apt install -y nginx certbot python3-certbot-nginx
+
+# Configure nginx (see /etc/nginx/sites-enabled/default on the server)
+# It proxies requests to the Docker containers
+
+# Get SSL certificate
+certbot --nginx -d the-ai-register.com
+```
+
+Visit `https://the-ai-register.com`.
+
+### DNS
+
+- **Provider**: Cloudflare (DNS-only, gray cloud — proxy was too slow)
+- **Record**: `A` record pointing `the-ai-register.com` to `167.233.44.167`
+
+### Keeping the app updated
+
+```bash
+ssh root@167.233.44.167
+cd /opt/ai-events-tracker
+git pull
+docker compose up -d --build
+```
+
+### Run the pipeline
+
+```bash
+cd /opt/ai-events-tracker
+docker compose --profile pipeline run --rm pipeline
+```
+
+The pipeline runs automatically at 6am every 3 days via cron (`0 6 */3 * *`).
+
+### Moving to a new server
+
+If migrating to a new server:
+1. Copy the entire `/opt/ai-events-tracker/` directory (including `data/events.db`)
+2. Install Docker + nginx + certbot
+3. Update the DNS A record to the new IP
+4. Run `certbot --nginx -d the-ai-register.com`
+5. Update the IP in this file
+
 ## 📝 Development Workflow
 
 This project follows the OpenSpec workflow. To propose changes or implement new features:
