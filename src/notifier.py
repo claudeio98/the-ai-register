@@ -1,17 +1,24 @@
 """Notification service using Gmail SMTP (App Password).
-Sends HTML-formatted email digests of high-value events to subscribers."""
+Sends HTML-formatted email digests of high-value events to subscribers,
+and handles feedback email notifications."""
 
 import os
 import smtplib
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from db import get_connection
 
 # Email configuration from environment
-GMAIL_USER = os.environ.get("GMAIL_USER", "p94126541@gmail.com")
+GMAIL_USER = os.environ.get("GMAIL_USER", "theairegister@gmail.com")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+FEEDBACK_RECIPIENT = os.environ.get("FEEDBACK_RECIPIENT", GMAIL_USER)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
+
+# Feedback log file path
+FEEDBACK_LOG_DIR = "data"
+FEEDBACK_LOG_FILE = os.path.join(FEEDBACK_LOG_DIR, "feedback.log")
 
 
 def send_email(to: str, subject: str, html_body: str, text_body: str | None = None) -> bool:
@@ -261,6 +268,46 @@ def send_notifications():
         print(f"Notifications sent successfully to {success_count} subscriber(s).")
     if fail_count > 0:
         print(f"Failed to send to {fail_count} subscriber(s).")
+
+
+# --- Feedback notification ---
+
+def log_feedback(category: str, message: str) -> None:
+    """Persist feedback to a local log file (always, as fallback)."""
+    os.makedirs(FEEDBACK_LOG_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = (
+        f"[{timestamp}]\n"
+        f"Category: {category}\n"
+        f"Message: {message}\n"
+        f"{'-' * 40}\n"
+    )
+    with open(FEEDBACK_LOG_FILE, "a") as f:
+        f.write(entry)
+
+
+def send_feedback_email(category: str, message: str) -> bool:
+    """Send a plain-text feedback email via Gmail SMTP. Returns True on success."""
+    body = (
+        f"Category: {category}\n\n"
+        f"Message:\n{message}\n"
+    )
+    return send_email(
+        to=FEEDBACK_RECIPIENT,
+        subject=f"[Feedback] {category}",
+        html_body=body,
+        text_body=body,
+    )
+
+
+def notify_feedback(category: str, message: str) -> None:
+    """Process feedback notification: log locally, then attempt email."""
+    log_feedback(category, message)
+    success = send_feedback_email(category, message)
+    if success:
+        print(f"Feedback email sent: [{category}] {message[:50]}...")
+    else:
+        print(f"Feedback logged locally (email failed): [{category}] {message[:50]}...")
 
 
 if __name__ == "__main__":

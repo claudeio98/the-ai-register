@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from db import get_connection
 from dedup import get_duplicate_count
-from feedback_notifier import notify_feedback
+from notifier import notify_feedback
 
 # Simple in-memory rate limiter for feedback endpoint
 import time as _time
