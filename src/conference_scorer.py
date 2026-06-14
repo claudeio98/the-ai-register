@@ -205,7 +205,7 @@ Score this conference based on the FULL speaker roster above."""
             
             try:
                 response = get_client().chat.completions.create(
-                    model=os.environ.get("MODEL_NAME", "google/gemma-4-31b-it"),
+                    model=os.environ.get("MODEL_NAME", "deepseek/deepseek-v4-flash"),
                     messages=[
                         {"role": "system", "content": CONFERENCE_SCORING_PROMPT},
                         {"role": "user", "content": prompt}

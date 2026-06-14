@@ -30,7 +30,7 @@ def query_llm(system_prompt, user_prompt, response_format="text"):
     try:
         client = get_client()
         response = client.chat.completions.create(
-            model=os.environ.get("MODEL_NAME", "google/gemma-4-31b-it"),
+            model=os.environ.get("MODEL_NAME", "deepseek/deepseek-v4-flash"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}

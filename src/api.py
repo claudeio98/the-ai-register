@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from db import get_connection
 from dedup import get_duplicate_count
-from feedback_notifier import notify_feedback
+from notifier import notify_feedback
 
 # Simple in-memory rate limiter for feedback endpoint
 import time as _time
@@ -57,12 +57,13 @@ def get_events(
     order: str = "asc",
     show_past: bool = False,
     subscriber_email: Optional[str] = None,
-    include_source: bool = False
+    include_source: bool = False,
+    include_all_dates: bool = False
 ):
     # Base query — only canonical events (canonical_event_id IS NULL)
     # Include discovery_source_id for provenance tracking
     query = """SELECT e.id, e.title, e.speaker, e.institution, e.date, e.url, e.score,
-                      e.status, e.discovery_source_id
+                      e.status, e.discovery_source_id, e.location
                FROM events e
                WHERE e.canonical_event_id IS NULL"""
     params = []
@@ -72,14 +73,18 @@ def get_events(
         conditions.append("e.status = ?")
         params.append(status)
 
+    # Exclude events without a valid date (can't show meaningfully)
+    conditions.append("e.date GLOB '20[0-9][0-9]*'")
+
     # Date filtering
-    now = datetime.now().strftime("%Y-%m-%d")
-    if not show_past:
-        conditions.append("e.date >= ?")
-        params.append(now)
-    else:
-        conditions.append("e.date < ?")
-        params.append(now)
+    if not include_all_dates:
+        now = datetime.now().strftime("%Y-%m-%d")
+        if not show_past:
+            conditions.append("e.date >= ?")
+            params.append(now)
+        else:
+            conditions.append("e.date < ?")
+            params.append(now)
 
     # Filter hidden events for subscribed users
     if subscriber_email:

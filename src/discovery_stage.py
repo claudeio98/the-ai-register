@@ -7,7 +7,7 @@ then sets crawl_depth on newly inserted sources.
 
 import sqlite3
 from db import get_connection
-from deep_discovery import get_crawl_depth_for_url
+from fetcher import get_crawl_depth_for_url
 
 
 def _update_crawl_depth_for_new_sources():

@@ -1,17 +1,4 @@
 services:
-  api:
-    build: .
-    container_name: events-api
-    ports:
-      - "8082:8082"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - BRAVE_API_KEY=${BRAVE_API_KEY}
-    command: ["python3", "src/api.py"]
-    restart: unless-stopped
-
   frontend:
     image: nginx:alpine
     container_name: events-frontend
@@ -24,6 +11,22 @@ services:
       - api
     restart: unless-stopped
 
+  api:
+    build: .
+    container_name: events-api
+    expose:
+      - "8082"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - FEEDBACK_RECIPIENT=${FEEDBACK_RECIPIENT}
+    command: ["python3", "src/api.py"]
+    restart: unless-stopped
+
   pipeline:
     build: .
     container_name: events-pipeline
@@ -33,5 +36,8 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
-    # Runs once and exits — scheduled via host cron
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - FEEDBACK_RECIPIENT=${FEEDBACK_RECIPIENT}
     command: ["python3", "src/pipeline.py"]
+

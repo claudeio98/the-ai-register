@@ -3,14 +3,12 @@ __pycache__/
 *.pyc
 .venv/
 
-# Data
-data/*.db
-
-# Logs
-logs/*.log
-
 # Environment
 .env
+
+# Runtime data
+data/
+logs/
 
 # OS
 .DS_Store
