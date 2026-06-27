@@ -204,17 +204,40 @@ def _build_text_digest(events: list[tuple]) -> str:
     return "\n".join(lines)
 
 
+def _is_future_date(date_str: str | None, today: datetime) -> bool:
+    """Check if a date string represents today or a future date.
+
+    Handles multiple formats stored in the DB: YYYY, YYYY-MM, YYYY-MM-DD.
+    Events with no date are included (we can't rule them out).
+    """
+    if not date_str:
+        return True
+    parts = date_str.split("-")
+    if len(parts) == 1 and len(parts[0]) == 4:
+        return int(parts[0]) >= today.year
+    if len(parts) == 2:
+        return (int(parts[0]), int(parts[1])) >= (today.year, today.month)
+    if len(parts) == 3:
+        return date_str >= today.strftime("%Y-%m-%d")
+    return True
+
+
 def generate_digest():
-    """Fetch high-value events and return (html_digest, text_digest, event_ids)."""
+    """Fetch high-value future events and return (html_digest, text_digest, event_ids)."""
+    today = datetime.now()
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, title, speaker, institution, date, url, score
             FROM events
             WHERE score >= 7 AND status = 'discovered'
+              AND (date >= date('now') OR date IS NULL OR date NOT GLOB '____-__-__')
             ORDER BY score DESC
         ''')
-        high_value_events = cursor.fetchall()
+        all_high_value = cursor.fetchall()
+
+    # Python post-filter for non-standard date formats (YYYY, YYYY-MM)
+    high_value_events = [e for e in all_high_value if _is_future_date(e[4], today)]
 
     if not high_value_events:
         print("No high-value events to notify.")

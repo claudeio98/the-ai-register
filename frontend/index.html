@@ -67,10 +67,8 @@
             <div class="p-6">
                 <div class="flex items-center gap-2">
                     <h1 class="text-2xl font-bold text-smart-primary cursor-pointer" @click="view='dashboard'; clearFilter(); search=''">The AI Register</h1>
-                    <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">📍 London</span>
-                </div>
-                <p class="text-xs text-smart-text-muted mt-1">Live Events Radar</p>
-            </div>
+                                    </div>
+                            </div>
             <nav class="flex-1 px-4 space-y-2 mt-4">
                 <button @click="view='dashboard'" :class="view==='dashboard'?'bg-indigo-50 text-smart-primary':'text-smart-text-muted hover:bg-gray-50'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium">
                     Dashboard
@@ -133,7 +131,7 @@
                     <span class="md:hidden">
                         <template v-if="dayFilter">📅 {{ new Date(dayFilter + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }}</template>
                         <template v-else-if="rangeFilter">📅 {{ new Date(rangeFilter.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }} – {{ new Date(rangeFilter.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}</template>
-                        <template v-else><span class="cursor-pointer" @click="view='dashboard'; clearFilter(); search=''">The AI Register</span> <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">📍 London</span></template>
+                        <template v-else><span class="cursor-pointer" @click="view='dashboard'; clearFilter(); search=''">The AI Register</span></template>
                     </span>
                     <span class="hidden md:inline capitalize">{{ view }}</span>
                 </h2>
@@ -168,6 +166,19 @@
                 <!-- Dashboard -->
                 <div v-if="view==='dashboard'">
 
+                    <!-- App description -->
+                    <div v-if="!dayFilter && !rangeFilter" class="mb-6">
+                        <div class="bg-smart-surface p-5 rounded-2xl border border-gray-100 shadow-sm">
+                            <p class="text-sm text-smart-text-muted leading-relaxed">
+                                The AI Register tracks AI/ML talks, conferences, workshops and meetups — mostly in London and Europe.
+                                Events are extracted from university calendars, conference pages, and event listings using an LLM pipeline,
+                                so occasional quirks, duplicates or hallucinated dates can happen. I use a lightweight model on a budget
+                                and regularly tighten the extraction prompts as issues surface. If something looks off, the
+                                <button @click="showFeedbackModal=true" class="text-smart-primary underline hover:no-underline font-medium">Feedback</button> button is the best way to flag it.
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Summary Widgets -->
                     <div v-if="!dayFilter && !rangeFilter" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div @click="filterToWeek" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer touch-active">
@@ -190,7 +201,7 @@
 
                     <!-- Highlights -->
                     <div v-if="!dayFilter && !rangeFilter" class="mb-6">
-                        <h3 class="text-sm font-bold text-smart-text-main mb-3">Highlights</h3>
+                        <h3 class="text-sm font-bold text-smart-text-main mb-3">Highlights in the next 6 months</h3>
                         <div v-if="highlights.length" class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div v-for="e in highlights" :key="e.id" :data-event-id="e.id" @click="detail=e" class="bg-smart-surface p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-200 transition-all cursor-pointer group/highlight touch-active">
                                 <div class="flex justify-between items-start mb-2">
@@ -207,6 +218,12 @@
                                 </div>
                                 <h4 class="text-xs font-bold line-clamp-2">{{ e.title }}</h4>
                                 <p class="text-[10px] text-smart-text-muted truncate mt-1">{{ e.institution || 'N/A' }}</p>
+                                <span v-if="e.location" class="inline-flex items-center text-[9px] font-bold mt-1.5 px-1.5 py-0.5 rounded-full"
+                                      :class="e.location.toLowerCase() === 'online' ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+                                    <template v-if="e.location.toLowerCase() === 'online'">🌐</template>
+                                    <template v-else>📍</template>
+                                    {{ e.location }}
+                                </span>
                             </div>
                         </div>
                         <div v-else class="text-center py-8 text-smart-text-muted bg-smart-surface rounded-2xl border border-dashed border-gray-200">
@@ -257,7 +274,15 @@
                                         </span>
                                     </div>
                                     <p class="text-xs text-smart-text-muted truncate">{{ e.institution || 'N/A' }}</p>
-                                    <p class="text-[10px] text-smart-text-muted mt-0.5">{{ e.date }}</p>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        <p class="text-[10px] text-smart-text-muted">{{ e.date }}</p>
+                                        <span v-if="e.location" class="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                              :class="e.location.toLowerCase() === 'online' ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+                                            <template v-if="e.location.toLowerCase() === 'online'">🌐</template>
+                                            <template v-else>📍</template>
+                                            {{ e.location }}
+                                        </span>
+                                    </div>
                                     <div v-if="e.duplicate_count > 0" class="mt-1 hidden md:block">
                                         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">+{{ e.duplicate_count }} more source{{ e.duplicate_count > 1 ? 's' : '' }}</span>
                                     </div>
@@ -546,12 +571,10 @@
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
                                 <h1 class="text-xl font-bold text-smart-primary cursor-pointer" @click="view='dashboard'; clearFilter(); search=''; closeDrawer()">The AI Register</h1>
-                                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">📍 London</span>
-                            </div>
+                                                            </div>
                             <button @click="closeDrawer" class="p-1.5 hover:bg-gray-100 rounded-full text-sm">✕</button>
                         </div>
-                        <p class="text-xs text-smart-text-muted mt-1">Live Events Radar</p>
-                    </div>
+                                            </div>
                     <div class="flex-1 overflow-y-auto p-4 space-y-4">
                         <div>
                             <template v-if="!subscriberEmail">
@@ -603,11 +626,12 @@
     </div>
 
     <script>
-        const { createApp, ref, onMounted, computed, onUnmounted } = Vue;
+        const { createApp, ref, onMounted, computed, onUnmounted, watch } = Vue;
 
         createApp({
             setup() {
                 const events = ref([]);
+                const calendarEvents = ref([]);
                 const loading = ref(true);
                 const view = ref('dashboard');
                 const search = ref('');
@@ -684,6 +708,18 @@
                     finally { loading.value = false; }
                 };
 
+                const fetchCalendarEvents = async (email) => {
+                    try {
+                        let url = `${API_BASE}/events?include_all_dates=true`;
+                        if (email) {
+                            url += `&subscriber_email=${encodeURIComponent(email)}`;
+                        }
+                        const r = await fetch(url);
+                        const data = await r.json();
+                        calendarEvents.value = Array.isArray(data) ? data : [];
+                    } catch(e) { console.error(e); }
+                };
+
                 const fetchHiddenIds = async (email) => {
                     if (!email) return;
                     try {
@@ -728,6 +764,7 @@
                     localStorage.removeItem('subscriber_email');
                     hiddenIds.value = new Set();
                     restoreMessage.value = null;
+                    calendarEvents.value = [];
                     fetchEvents();
                 };
 
@@ -763,6 +800,7 @@
                         if (r.ok) {
                             hiddenIds.value.add(eventId);
                             events.value = events.value.filter(e => e.id !== eventId);
+                            calendarEvents.value = calendarEvents.value.filter(e => e.id !== eventId);
                             if (detail.value && detail.value.id === eventId) {
                                 detail.value = null;
                             }
@@ -789,6 +827,7 @@
                             hiddenIds.value.delete(eventId);
                             hiddenEvents.value = hiddenEvents.value.filter(e => e.id !== eventId);
                             await fetchEvents(subscriberEmail.value);
+                            await fetchCalendarEvents(subscriberEmail.value);
                         }
                     } catch(e) { console.error('Unhide failed:', e); }
                 };
@@ -801,6 +840,7 @@
                             hiddenIds.value = new Set();
                             hiddenEvents.value = [];
                             await fetchEvents(subscriberEmail.value);
+                            await fetchCalendarEvents(subscriberEmail.value);
                         }
                     } catch(e) { console.error('Unhide all failed:', e); }
                 };
@@ -946,6 +986,13 @@
                     }
                 });
 
+                // Fetch all dates when switching to Calendar view
+                watch(view, (newView) => {
+                    if (newView === 'calendar' && calendarEvents.value.length === 0) {
+                        fetchCalendarEvents(subscriberEmail.value || undefined);
+                    }
+                });
+
                 const filtered = computed(() => {
                     let list = [...events.value];
                     if (search.value) {
@@ -1003,15 +1050,20 @@
                 const scoreTooltipText = 'Scores (0–10) are AI-generated based on relevance, timeliness, and event prominence.';
 
                 const highlights = computed(() => {
+                    const sixMonths = new Date();
+                    sixMonths.setMonth(sixMonths.getMonth() + 6);
                     return events.value
-                        .filter(e => new Date(e.date) >= new Date())
+                        .filter(e => {
+                            const d = new Date(e.date);
+                            return d >= new Date() && d <= sixMonths;
+                        })
                         .sort((a, b) => b.score - a.score)
                         .slice(0, 3);
                 });
 
                 const evtMap = computed(() => {
                     const m = {};
-                    events.value.forEach(e => { const d = norm(e.date); if (d) { if (!m[d]) m[d] = []; m[d].push(e); } });
+                    calendarEvents.value.forEach(e => { const d = norm(e.date); if (d) { if (!m[d]) m[d] = []; m[d].push(e); } });
                     return m;
                 });
 
@@ -1089,6 +1141,7 @@
                             localStorage.setItem('subscriber_email', email.toLowerCase());
                             await fetchHiddenIds(email.toLowerCase());
                             await fetchEvents(email.toLowerCase());
+                            await fetchCalendarEvents(email.toLowerCase());
                             setTimeout(() => { showSubscribeModal.value = false; subscribeEmail.value = ''; subscribeMessage.value = null; }, 1500);
                         } else {
                             subscribeMessage.value = { type: 'error', text: data.error || 'Subscription failed.' };
@@ -1185,9 +1238,9 @@
 
                 // Hidden events are refreshed on click via @click in template
 
-                return { events, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
+                return { events, calendarEvents, loading, view, search, detail, filtered, norm, scoreClass, monthName, calYear, thisWeek, thisMonth, highlights, calCells, calShift, onDayClick, isDayActive, dayFilter, rangeFilter, filterToWeek, filterToMonth, clearFilter, showSubscribeModal, subscribeEmail, subscribeLoading, subscribeMessage, subscribe, unsubscribe, closeSubscribeModal, scoreTooltipText, thisWeekEvts, thisMonthEvts,
                     subscriberEmail, hiddenIds, restoreEmail, restoreLoading, restoreMessage, showHiddenPanel, hiddenEvents,
-                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents, hideLoading,
+                    doRestore, clearRestore, doHide, doUnhide, doUnhideAll, refreshHiddenEvents, hideLoading, fetchCalendarEvents,
                     showFeedbackModal, feedbackCategory, feedbackMessage, feedbackLoading, feedbackStatus,
                     submitFeedback, closeFeedbackModal,
                     isMobile, showDrawer, closeDrawer, searchExpanded, searchInput, activeTooltip, toggleTooltip,

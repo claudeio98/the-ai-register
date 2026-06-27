@@ -21,6 +21,9 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - FEEDBACK_RECIPIENT=${FEEDBACK_RECIPIENT}
     command: ["python3", "src/api.py"]
     restart: unless-stopped
 
@@ -33,5 +36,8 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - FEEDBACK_RECIPIENT=${FEEDBACK_RECIPIENT}
     command: ["python3", "src/pipeline.py"]
 

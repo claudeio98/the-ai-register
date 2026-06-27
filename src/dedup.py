@@ -260,7 +260,7 @@ def semantic_check(event_a, event_b):
     """
     try:
         response = get_client().chat.completions.create(
-            model=os.environ.get("MODEL_NAME", "google/gemma-4-31b-it"),
+            model=os.environ.get("MODEL_NAME", "deepseek/deepseek-v4-flash"),
             messages=[
                 {"role": "system", "content": "You are a precise event deduplication agent. Respond only in JSON."},
                 {"role": "user", "content": prompt}

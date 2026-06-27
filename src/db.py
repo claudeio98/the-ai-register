@@ -69,6 +69,12 @@ def init_db():
             )
         ''')
         
+        # Migration: add location column (safe to re-run)
+        try:
+            cursor.execute("ALTER TABLE events ADD COLUMN location TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
         # hidden_events table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS hidden_events (
